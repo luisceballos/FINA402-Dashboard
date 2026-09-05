@@ -139,6 +139,18 @@ hr.div { border:none; border-top:1px solid var(--border); margin:18px 0; }
   <div class="ftr"><a onclick="openAdmin()">⚙ Instructor Access</a></div>
 </div>
 
+<!-- Success Modal -->
+<div id="success-modal" class="modal-bg" hidden>
+  <div class="modal" style="text-align:center;max-width:400px">
+    <div style="font-size:52px;margin-bottom:8px">✅</div>
+    <h2 style="font-size:18px;font-weight:700;color:#065F46;margin-bottom:6px">Submission Successful!</h2>
+    <div id="success-info" style="font-size:13px;color:#5A6E8A;margin-bottom:16px"></div>
+    <div id="success-alloc" style="background:#F5F7FB;border-radius:8px;padding:12px 14px;margin-bottom:16px;text-align:left;font-size:12px;max-height:220px;overflow-y:auto"></div>
+    <div class="msg ok" style="margin-bottom:14px;font-size:12px">⚠ Your allocation is now <strong>locked for Week <span id="success-week"></span></strong>. Contact your instructor if you need to make changes.</div>
+    <button class="btn bp-" onclick="closeSuccessModal()" style="width:100%">Close</button>
+  </div>
+</div>
+
 <!-- AI JSON Import Modal -->
 <div id="ai-modal" class="modal-bg" hidden>
   <div class="modal">
@@ -230,10 +242,10 @@ const DEFAULT_ACTIVE = ['SPY','XLK','XLF','XLE','XLV','XLY','XLP','XLU','XLB','X
 /* ── state ── */
 let activeWeek=null, adminPw=null;
 let aiAlloc=null, aiRationale='';
-let weekCfg  = {activeAssets:[...DEFAULT_ACTIVE], globalMin:0, globalMax:100};
+let weekCfg  = {activeAssets:[...DEFAULT_ACTIVE], globalMin:0, globalMax:100, weekOpen:true, allowResubmit:false};
 let userAlloc  = Object.fromEntries(ETFS.map(e=>[e.id,0]));
 let adminAlloc = Object.fromEntries(ETFS.map(e=>[e.id,0]));
-let adminCfg   = {activeAssets:[...DEFAULT_ACTIVE], globalMin:0, globalMax:100};
+let adminCfg   = {activeAssets:[...DEFAULT_ACTIVE], globalMin:0, globalMax:100, weekOpen:true, allowResubmit:false};
 let adminAuth  = false;
 
 const $  = id => document.getElementById(id);
@@ -263,7 +275,13 @@ async function init(){
       const wc = await fs.doc(`config/week_cfg_${activeWeek}`).get();
       if(wc.exists){
         const d=wc.data();
-        weekCfg={activeAssets:d.activeAssets||[...DEFAULT_ACTIVE],globalMin:Number(d.globalMin)||0,globalMax:Number(d.globalMax)||100};
+        weekCfg={
+          activeAssets:d.activeAssets||[...DEFAULT_ACTIVE],
+          globalMin:Number(d.globalMin)||0,
+          globalMax:Number(d.globalMax)||100,
+          weekOpen: d.weekOpen !== false,       // default true
+          allowResubmit: d.allowResubmit===true // default false
+        };
       }
     }catch(_){}
 
@@ -287,6 +305,7 @@ async function init(){
 function updateChip(){
   const c=$('wchip');
   if(!activeWeek){c.textContent='Not configured';c.className='wk-chip off';return;}
+  if(!weekCfg.weekOpen){c.textContent=`Week ${activeWeek} — Closed`;c.className='wk-chip off';return;}
   c.textContent=`Week ${activeWeek} — Open`; c.className='wk-chip';
 }
 
@@ -302,6 +321,14 @@ function showNotReady(){
 
 /* ══════════ STUDENT FORM ══════════ */
 function renderForm(){
+  if(!weekCfg.weekOpen){
+    $('body').innerHTML=`<div class="card" style="text-align:center;padding:40px">
+      <div style="font-size:36px;margin-bottom:12px">🔒</div>
+      <p style="font-size:16px;font-weight:600;color:#1E3A5F;margin-bottom:8px">Week ${activeWeek} is Closed</p>
+      <p style="color:#5A6E8A;font-size:14px">Your instructor has closed submissions for this week. Check back when the next week opens.</p>
+    </div>`;
+    updateChip(); return;
+  }
   const active=activeEtfs(weekCfg);
   const gMin=weekCfg.globalMin, gMax=weekCfg.globalMax;
   const chips=active.map(e=>`<span class="achip" style="color:${e.color};border-color:${e.color}22">${e.id}</span>`).join('');
@@ -451,10 +478,8 @@ async function onTC(){
     const badge=$('sub-badge'), btn=$('sb'), idm=$('id-msg');
     if(snap.exists){
       const d=snap.data();
-      const ts=d.submittedAt?new Date(d.submittedAt).toLocaleString():'—';
-      if(idm)idm.innerHTML=`<div class="msg wn" style="margin-top:10px">⚠ <strong>Already submitted Week ${activeWeek}.</strong> Last saved: ${ts}. You can update below.</div>`;
-      if(badge)badge.innerHTML='<span class="sub-badge">✓ Submitted</span>';
-      if(btn)btn.textContent='Update Submission';
+      const ts=d.submittedAt?new Date(d.submittedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+      // Load their previous allocations into sliders
       activeEtfs(weekCfg).forEach(e=>{
         const v=Number(d.allocations?.[e.id])||0;
         userAlloc[e.id]=v;
@@ -465,6 +490,26 @@ async function onTC(){
       });
       const rat=$('rat'); if(rat)rat.value=d.rationale||'';
       updTotal(); if(aiAlloc)updCmp();
+
+      if(!weekCfg.allowResubmit){
+        // LOCKED — one submission per week
+        if(badge)badge.innerHTML='<span class="sub-badge">✓ Submitted</span>';
+        if(btn){btn.disabled=true;btn.textContent='Allocation Locked';}
+        if(idm)idm.innerHTML=`<div class="msg ok" style="margin-top:10px">
+          ✅ <strong>Your Week ${activeWeek} allocation was submitted on ${ts}.</strong>
+          Contact your instructor if you need to make changes.
+        </div>`;
+        // Disable all sliders and inputs
+        document.querySelectorAll('#sg input').forEach(el=>el.disabled=true);
+        const ratEl=$('rat'); if(ratEl)ratEl.disabled=true;
+      } else {
+        // Resubmit allowed by instructor
+        if(badge)badge.innerHTML='<span class="sub-badge" style="background:#FEF3C7;color:#92400E;border-color:#FCD34D">✏ Edit Allowed</span>';
+        if(btn){btn.disabled=false;btn.textContent='Update Submission';}
+        if(idm)idm.innerHTML=`<div class="msg wn" style="margin-top:10px">
+          ✏ <strong>Your instructor has allowed you to update your Week ${activeWeek} submission.</strong> Last saved: ${ts}.
+        </div>`;
+      }
     } else {
       if(idm)idm.innerHTML='';
       if(badge)badge.innerHTML='';
@@ -480,6 +525,12 @@ async function onTC(){
 async function doSubmit(){
   const sec=$('ss')?.value, tm=$('st')?.value, fm=$('fm');
   if(!sec||!tm){if(fm)fm.innerHTML='<div class="msg er">Select your section and team first.</div>';return;}
+  if(!weekCfg.weekOpen){if(fm)fm.innerHTML='<div class="msg er">Week '+activeWeek+' is closed. Submissions are no longer accepted.</div>';return;}
+  // Block resubmission if not allowed
+  if(!weekCfg.allowResubmit){
+    const existing=await fs.doc(`submissions/S${sec}-T${tm}-W${activeWeek}`).get();
+    if(existing.exists){if(fm)fm.innerHTML='<div class="msg er">You already submitted Week '+activeWeek+'. Contact your instructor to make changes.</div>';return;}
+  }
   const active=activeEtfs(weekCfg);
   const gMin=weekCfg.globalMin||0, gMax=weekCfg.globalMax||100;
   if(gMin>0||gMax<100){
@@ -499,14 +550,34 @@ async function doSubmit(){
       allocations:allocToSave,rationale:rat,
       submittedAt:new Date().toISOString(),
     });
-    if(fm)fm.innerHTML=`<div class="msg ok">✓ <strong>Saved!</strong> Section ${sec} · Team ${tm} · Week ${activeWeek}.</div>`;
+    // Show success modal
+    const info=$('success-info');
+    if(info)info.textContent=`Section ${sec} · Team ${tm} · Week ${activeWeek}`;
+    const sw=$('success-week'); if(sw)sw.textContent=activeWeek;
+    const sa=$('success-alloc');
+    if(sa){
+      const lines=Object.entries(allocToSave).filter(([,v])=>v>0)
+        .sort((a,b)=>b[1]-a[1])
+        .map(([t,v])=>{const e=ETFS.find(x=>x.id===t)||{color:'#5A6E8A',name:t};
+          return `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #E8EDF5">
+            <span style="color:${e.color};font-weight:700">${t}</span>
+            <span style="font-weight:600">${v}%</span></div>`;});
+      sa.innerHTML=lines.join('');
+    }
+    $('success-modal').hidden=false;
+    if(fm)fm.innerHTML='';
+    // Lock form
     const badge=$('sub-badge'); if(badge)badge.innerHTML='<span class="sub-badge">✓ Submitted</span>';
-    if(btn){btn.disabled=false;btn.textContent='Update Submission';}
+    if(btn){btn.disabled=true;btn.textContent='Allocation Locked';}
+    document.querySelectorAll('#sg input').forEach(el=>el.disabled=true);
+    const ratEl=$('rat'); if(ratEl)ratEl.disabled=true;
   }catch(err){
     if(fm)fm.innerHTML=`<div class="msg er">Error: ${err.message}</div>`;
     if(btn){btn.disabled=false;btn.textContent='Submit Allocation';}
   }
 }
+function closeSuccessModal(){ $('success-modal').hidden=true; }
+function toggleRat(id){ const el=$(id); if(el)el.hidden=!el.hidden; }
 
 /* ══════════ ADMIN ══════════ */
 function openAdmin(){
@@ -588,7 +659,18 @@ async function renderAdmin(){
       ${[1,2,3,4].map(s=>`<div class="sb"><div class="sn">${counts[s]}</div><div class="sl">Section ${s}</div></div>`).join('')}
     </div>
     <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:18px">
+      ${weekCfg.weekOpen
+        ?`<button class="btn bh-" style="border-color:#DC2626;color:#DC2626" onclick="toggleWeekOpen(false)">🔒 Close Week ${activeWeek}</button>`
+        :`<button class="btn bg-" onclick="toggleWeekOpen(true)">🔓 Re-Open Week ${activeWeek}</button>`}
       <button class="btn bg-" onclick="advWeek()">→ Open Week ${activeWeek+1}</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#F5F7FB;border:1.5px solid var(--border);border-radius:8px;margin-bottom:18px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="resubmit-chk" ${weekCfg.allowResubmit?'checked':''} onchange="toggleResubmit(this.checked)"
+          style="width:16px;height:16px;cursor:pointer;accent-color:#1E3A5F">
+        <span><strong>Allow resubmissions this week</strong></span>
+      </label>
+      <span style="font-size:11px;color:#5A6E8A">If checked, teams can update their allocation. Uncheck to lock everyone to one submission.</span>
     </div>
     <div id="advm"></div>
     <div id="cpw-wrap" hidden>
@@ -665,13 +747,7 @@ async function renderAdmin(){
     <div id="sub-table-wrap"><div class="msg in" style="font-size:12px">Loading…</div></div>
   </div>
 
-  <div class="card">
-    <div class="ct">📈 Performance Simulator</div>
-    <p style="font-size:12px;color:#5A6E8A;margin-bottom:14px">Enter actual ETF returns for the week. The hub calculates each team's portfolio return and ranks them.</p>
-    <div id="ret-inputs-wrap"><div class="msg in" style="font-size:12px">Load submissions first to see the ETFs used this week.</div></div>
-    <div id="perf-msg" style="margin-top:10px"></div>
-    <div id="perf-result"></div>
-  </div>`;
+  `;
 
   buildCfgTable();
   buildSliders('asg',adminAlloc,adminCfg,true);
@@ -708,138 +784,35 @@ async function loadSubmissions(){
       <thead><tr>
         <th>Section</th><th>Team</th>
         ${_usedEtfs.map(t=>`<th style="color:${ETFS.find(e=>e.id===t)?.color||'#5A6E8A'}">${t}</th>`).join('')}
-        <th style="white-space:normal;min-width:160px">Rationale</th>
+        <th style="min-width:90px">Rationale</th>
         <th>Submitted</th>
       </tr></thead>
       <tbody>`;
-    _cachedSubs.forEach(s=>{
+    _cachedSubs.forEach((s,i)=>{
       const alloc = s.allocations||{};
       const ts = s.submittedAt ? new Date(s.submittedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+      const rid=`rat-${i}`;
       html += `<tr>
         <td style="font-weight:600">S${s.section}</td>
         <td style="font-weight:600">T${String(s.team).padStart(2,'0')}</td>
         ${_usedEtfs.map(t=>{const v=alloc[t]||0;return `<td style="text-align:right;color:${v>0?'#1E3A5F':'#94A3B8'}">${v>0?v+'%':'—'}</td>`;}).join('')}
-        <td style="white-space:normal;max-width:220px;color:#5A6E8A;font-size:11px">${(s.rationale||'').slice(0,120)}${(s.rationale||'').length>120?'…':''}</td>
+        <td><button onclick="toggleRat('${rid}')" style="background:none;border:1px solid #C8D4E8;border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer;color:#1E40AF">View</button></td>
         <td style="color:#5A6E8A;font-size:11px">${ts}</td>
+      </tr>
+      <tr id="${rid}" hidden>
+        <td colspan="${3+_usedEtfs.length}" style="white-space:normal;background:#F5F7FB;color:#0F1E35;font-size:12px;padding:10px 12px;line-height:1.5">
+          <strong style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#5A6E8A">S${s.section} · T${String(s.team).padStart(2,'0')} Rationale</strong><br>${s.rationale||'—'}
+        </td>
       </tr>`;
     });
     html += '</tbody></table></div>';
     html += `<p style="font-size:11px;color:#5A6E8A;margin-top:8px">${_cachedSubs.length} submission${_cachedSubs.length!==1?'s':''} · ${_usedEtfs.length} ETF${_usedEtfs.length!==1?'s':''} used this week</p>`;
     wrap.innerHTML = html;
-
-    buildReturnInputs();
   }catch(err){
     wrap.innerHTML=`<div class="msg er" style="font-size:12px">Error: ${err.message}</div>`;
   }
 }
 
-/* ── Build ETF return input fields ── */
-function buildReturnInputs(){
-  const wrap = $('ret-inputs-wrap');
-  if(!wrap) return;
-  if(_usedEtfs.length===0){
-    wrap.innerHTML='<div class="msg wn" style="font-size:12px">No submissions loaded. Click Refresh above first.</div>';
-    return;
-  }
-  let html = `<p style="font-size:11px;color:#5A6E8A;margin-bottom:10px">Enter each ETF's actual weekly return (positive = gain, negative = loss). Use decimals for fractions.</p>
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:13px">`;
-  _usedEtfs.forEach(t=>{
-    const etf = ETFS.find(e=>e.id===t)||{color:'#5A6E8A',name:t};
-    html += `<div style="background:#F5F7FB;border:1.5px solid #C8D4E8;border-radius:8px;padding:9px 10px">
-      <div style="font-size:11px;font-weight:700;color:${etf.color};margin-bottom:5px">${t}</div>
-      <div style="font-size:9px;color:#5A6E8A;margin-bottom:6px">${etf.name||''}</div>
-      <div style="display:flex;align-items:center;gap:4px">
-        <input type="number" id="ret-${t}" step="0.01" placeholder="0.00"
-          style="width:70px;padding:4px 6px;font-size:12px;border:1.5px solid #C8D4E8;border-radius:6px;text-align:right">
-        <span style="font-size:12px;color:#5A6E8A">%</span>
-      </div>
-    </div>`;
-  });
-  html += '</div>';
-  html += '<button class="btn bg-" onclick="calcPerformance()" style="padding:8px 20px">Calculate & Rank Teams</button>';
-  wrap.innerHTML = html;
-}
-
-/* ── Calculate performance and show leaderboard ── */
-function calcPerformance(){
-  const pm=$('perf-msg'), pr=$('perf-result');
-  if(!pm||!pr)return;
-  if(_cachedSubs.length===0){pm.innerHTML='<div class="msg er" style="font-size:12px">No submissions loaded. Refresh first.</div>';return;}
-
-  // Read ETF returns
-  const returns = {};
-  let missing = [];
-  _usedEtfs.forEach(t=>{
-    const v = parseFloat($(`ret-${t}`)?.value);
-    if(isNaN(v)){ missing.push(t); returns[t]=0; }
-    else returns[t]=v/100; // convert % to decimal
-  });
-  if(missing.length>0){pm.innerHTML=`<div class="msg wn" style="font-size:12px">Missing returns for: ${missing.join(', ')}. Using 0% for those.</div>`;}
-  else pm.innerHTML='';
-
-  // Calculate portfolio return for each team
-  const results = _cachedSubs.map(s=>{
-    const alloc = s.allocations||{};
-    const total = Object.values(alloc).reduce((a,b)=>a+b,0)||100;
-    let portRet = 0;
-    Object.entries(alloc).forEach(([t,w])=>{
-      portRet += (w/total)*(returns[t]||0);
-    });
-    return {
-      label:`S${s.section}-T${String(s.team).padStart(2,'0')}`,
-      section:s.section, team:s.team,
-      ret: portRet,
-      alloc,
-    };
-  });
-  results.sort((a,b)=>b.ret-a.ret);
-
-  const medal=['🥇','🥈','🥉'];
-  let html=`<div style="margin-top:4px">
-    <div style="font-size:12px;font-weight:700;color:#1E3A5F;margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Week ${activeWeek} Leaderboard</div>
-    <table class="ctable" style="font-size:12px">
-      <thead><tr><th style="width:32px">#</th><th>Team</th><th style="text-align:right">Weekly Return</th><th style="text-align:right">vs. AI Benchmark</th></tr></thead>
-      <tbody>`;
-
-  // Compute AI benchmark return if available
-  let aiBenchRet = null;
-  if(aiAlloc){
-    const aiTotal = Object.values(aiAlloc).reduce((a,b)=>a+b,0)||100;
-    aiBenchRet=0;
-    Object.entries(aiAlloc).forEach(([t,w])=>{ aiBenchRet+=(w/aiTotal)*(returns[t]||0); });
-  }
-
-  results.forEach((r,i)=>{
-    const pct=(r.ret*100).toFixed(2);
-    const isPos=r.ret>=0;
-    const cls=isPos?'#16A34A':'#DC2626';
-    const sign=isPos?'+':'';
-    let vs='—';
-    if(aiBenchRet!==null){
-      const diff=(r.ret-aiBenchRet)*100;
-      vs=`<span style="color:${diff>=0?'#16A34A':'#DC2626'}">${diff>=0?'+':''}${diff.toFixed(2)}%</span>`;
-    }
-    html+=`<tr style="${i<3?'font-weight:600':''}">
-      <td>${medal[i]||i+1}</td>
-      <td>Section ${r.section} · Team ${String(r.team).padStart(2,'0')}</td>
-      <td style="text-align:right;color:${cls};font-weight:600;font-variant-numeric:tabular-nums">${sign}${pct}%</td>
-      <td style="text-align:right;font-variant-numeric:tabular-nums">${vs}</td>
-    </tr>`;
-  });
-
-  if(aiBenchRet!==null){
-    const aiPct=(aiBenchRet*100).toFixed(2);
-    html+=`<tr style="background:#EFF6FF;border-top:2px solid #BFDBFE">
-      <td>🤖</td><td style="color:#1E40AF;font-weight:600">AI Benchmark</td>
-      <td style="text-align:right;color:${aiBenchRet>=0?'#16A34A':'#DC2626'};font-weight:600;font-variant-numeric:tabular-nums">${aiBenchRet>=0?'+':''}${aiPct}%</td>
-      <td style="text-align:right;color:#5A6E8A">—</td>
-    </tr>`;
-  }
-  html+='</tbody></table>';
-  html+=`<p style="font-size:11px;color:#5A6E8A;margin-top:8px">Returns calculated as Σ(weight × ETF return) — Week ${activeWeek}</p>`;
-  html+='</div>';
-  pr.innerHTML=html;
-}
 
 /* ── Export portfolios.csv ── */
 function exportCsv(){
@@ -860,8 +833,14 @@ function exportCsv(){
   const blob=new Blob([csv],{type:'text/csv'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=url; a.download=`portfolios_week${activeWeek}.csv`;
+  a.href=url; a.download=`FA2026_W${activeWeek}_portfolios.csv`;
   a.click(); URL.revokeObjectURL(url);
+  // Show folder reminder
+  const m=$('sub-table-wrap');
+  const note=document.createElement('div');
+  note.className='msg in'; note.style.fontSize='12px'; note.style.marginTop='10px';
+  note.innerHTML=`📁 Save the file to: <code style="background:#E8EDF5;padding:2px 6px;border-radius:4px">C:\\Users\\luisceballos\\My Drive\\Classes\\FINA402\\AI_portfolios\\FA2026\\</code><br>Then rename it to <code style="background:#E8EDF5;padding:2px 6px;border-radius:4px">portfolios.csv</code> before running generate_dashboard.py`;
+  if(m)m.appendChild(note);
 }
 
 /* ── global constraint ── */
@@ -927,10 +906,36 @@ async function saveCfg(){
   try{
     await fs.doc(`config/week_cfg_${activeWeek}`).set({
       activeAssets:adminCfg.activeAssets, globalMin:gMin, globalMax:gMax,
+      weekOpen:adminCfg.weekOpen, allowResubmit:adminCfg.allowResubmit,
     });
     weekCfg={...adminCfg};
     if(m)m.innerHTML=`<div class="msg ok">✓ Saved — ${adminCfg.activeAssets.length} ETFs, range ${gMin}–${gMax}%.</div>`;
   }catch(err){if(m)m.innerHTML=`<div class="msg er">Error: ${err.message}</div>`;}
+}
+
+async function toggleWeekOpen(open){
+  try{
+    await fs.doc(`config/week_cfg_${activeWeek}`).set({
+      activeAssets:weekCfg.activeAssets, globalMin:weekCfg.globalMin, globalMax:weekCfg.globalMax,
+      weekOpen:open, allowResubmit:weekCfg.allowResubmit,
+    },{merge:true});
+    weekCfg.weekOpen=open; adminCfg.weekOpen=open;
+    const m=$('advm');
+    if(m)m.innerHTML=`<div class="msg ${open?'ok':'wn'}">✓ Week ${activeWeek} is now <strong>${open?'Open — students can submit':'Closed — submissions blocked'}</strong>.</div>`;
+    updateChip(); renderAdmin();
+  }catch(err){alert('Error: '+err.message);}
+}
+
+async function toggleResubmit(allowed){
+  try{
+    await fs.doc(`config/week_cfg_${activeWeek}`).set({
+      activeAssets:weekCfg.activeAssets, globalMin:weekCfg.globalMin, globalMax:weekCfg.globalMax,
+      weekOpen:weekCfg.weekOpen, allowResubmit:allowed,
+    },{merge:true});
+    weekCfg.allowResubmit=allowed; adminCfg.allowResubmit=allowed;
+    const m=$('advm');
+    if(m)m.innerHTML=`<div class="msg ok">✓ Resubmissions <strong>${allowed?'enabled':'disabled'}</strong> for Week ${activeWeek}.</div>`;
+  }catch(err){alert('Error: '+err.message);}
 }
 
 /* ── admin slider events ── */
@@ -1042,10 +1047,14 @@ async function advWeek(){
   if(!confirm(`Open Week ${next}? Students can no longer edit Week ${activeWeek} submissions.`))return;
   try{
     await fs.doc('config/settings').update({activeWeek:next});
+    // Initialize new week config with open=true, allowResubmit=false
+    await fs.doc(`config/week_cfg_${next}`).set({
+      activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100,weekOpen:true,allowResubmit:false
+    });
     activeWeek=next;aiAlloc=null;aiRationale='';
     adminAlloc=Object.fromEntries(ETFS.map(e=>[e.id,0]));
-    adminCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100};
-    weekCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100};
+    adminCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100,weekOpen:true,allowResubmit:false};
+    weekCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100,weekOpen:true,allowResubmit:false};
     updateChip();renderAdmin();
     const m=$('advm');if(m)m.innerHTML=`<div class="msg ok">✓ Week ${next} open. Assets reset to sectors — configure as needed.</div>`;
   }catch(err){alert('Error: '+err.message);}
