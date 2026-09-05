@@ -828,33 +828,58 @@ async function loadSubmissions(){
 }
 
 
-/* ── Export portfolios.csv ── */
-function exportCsv(){
-  if(_cachedSubs.length===0){alert('No submissions to export. Refresh first.');return;}
+/* ── Export portfolios.csv (cumulative — all weeks) ── */
+async function exportCsv(){
+  const btn = document.querySelector('[onclick="exportCsv()"]');
+  if(btn){btn.disabled=true; btn.textContent='⏳ Fetching all weeks…';}
+  try{
+    // Fetch ALL submissions across every week (not just the active one)
+    const sn = await fs.collection('submissions').get();
+    const allSubs = sn.docs.map(d=>({id:d.id,...d.data()}))
+                           .sort((a,b)=>(a.week-b.week)||a.section-b.section||a.team-b.team);
 
-  // Gather all ETFs across all submissions
-  const etfSet=new Set();
-  _cachedSubs.forEach(s=>Object.keys(s.allocations||{}).forEach(k=>etfSet.add(k)));
-  const cols=[...etfSet].sort();
+    if(allSubs.length===0){
+      alert('No submissions found across any week.');
+      return;
+    }
 
-  let csv=','+cols.join(',')+'\n';
-  _cachedSubs.forEach(s=>{
-    const row=`S${s.section}-T${String(s.team).padStart(2,'0')}`;
-    const vals=cols.map(t=>s.allocations[t]||0);
-    csv+=row+','+vals.join(',')+'\n';
-  });
+    // Gather all ETF tickers used across ALL weeks
+    const etfSet=new Set();
+    allSubs.forEach(s=>Object.keys(s.allocations||{}).forEach(k=>{
+      if((s.allocations[k]||0)>0) etfSet.add(k);
+    }));
+    const cols=[...etfSet].sort();
 
-  const blob=new Blob([csv],{type:'text/csv'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url; a.download=`${semesterFolder}_W${activeWeek}_portfolios.csv`;
-  a.click(); URL.revokeObjectURL(url);
-  // Show folder reminder
-  const m=$('sub-table-wrap');
-  const note=document.createElement('div');
-  note.className='msg in'; note.style.fontSize='12px'; note.style.marginTop='10px';
-  note.innerHTML=`📁 Save to: <code style="background:#E8EDF5;padding:2px 6px;border-radius:4px">C:\\Users\\luisceballos\\My Drive\\Classes\\FINA402\\AI_portfolios\\${semesterFolder}\\</code><br>Then rename to <code style="background:#E8EDF5;padding:2px 6px;border-radius:4px">portfolios.csv</code> before running generate_dashboard.py`;
-  if(m)m.appendChild(note);
+    // Row name includes week: S1-T01-W3
+    let csv=','+cols.join(',')+'\n';
+    allSubs.forEach(s=>{
+      const row=`S${s.section}-T${String(s.team).padStart(2,'0')}-W${s.week}`;
+      const vals=cols.map(t=>s.allocations?.[t]||0);
+      csv+=row+','+vals.join(',')+'\n';
+    });
+
+    const blob=new Blob([csv],{type:'text/csv'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=`${semesterFolder}_portfolios.csv`;
+    a.click(); URL.revokeObjectURL(url);
+
+    // Show folder reminder
+    const m=$('sub-table-wrap');
+    // Remove any previous note
+    const old=m.querySelector('.export-note');
+    if(old)old.remove();
+    const note=document.createElement('div');
+    note.className='msg ok export-note'; note.style.fontSize='12px'; note.style.marginTop='10px';
+    note.innerHTML=`✅ Exported <strong>${allSubs.length} rows across all weeks</strong> — row format: S1-T01-W3<br>
+      📁 Save to: <code style="background:#D1FAE5;padding:2px 6px;border-radius:4px">C:\\Users\\luisceballos\\My Drive\\Classes\\FINA402\\AI_portfolios\\Allocations\\</code><br>
+      Overwrite the existing file — all weeks (W1–W${activeWeek}) are included automatically. Then rename to <code style="background:#D1FAE5;padding:2px 6px;border-radius:4px">portfolios.csv</code> before running generate_dashboard.py`;
+    if(m)m.appendChild(note);
+  }catch(err){
+    alert('Error exporting: '+err.message);
+  }finally{
+    if(btn){btn.disabled=false; btn.textContent='⬇ Export portfolios.csv';}
+  }
 }
 
 /* ── global constraint ── */
