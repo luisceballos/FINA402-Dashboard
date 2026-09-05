@@ -242,6 +242,7 @@ const DEFAULT_ACTIVE = ['SPY','XLK','XLF','XLE','XLV','XLY','XLP','XLU','XLB','X
 /* ── state ── */
 let activeWeek=null, adminPw=null;
 let aiAlloc=null, aiRationale='';
+let semesterFolder='FA2026';
 let weekCfg  = {activeAssets:[...DEFAULT_ACTIVE], globalMin:0, globalMax:100, weekOpen:true, allowResubmit:false};
 let userAlloc  = Object.fromEntries(ETFS.map(e=>[e.id,0]));
 let adminAlloc = Object.fromEntries(ETFS.map(e=>[e.id,0]));
@@ -268,8 +269,9 @@ async function init(){
     const snap = await fs.doc('config/settings').get();
     if(!snap.exists){ showNotReady(); return; }
     const cfg = snap.data();
-    activeWeek = cfg.activeWeek||1;
-    adminPw    = cfg.adminPassword||'';
+    activeWeek     = cfg.activeWeek||1;
+    adminPw        = cfg.adminPassword||'';
+    semesterFolder = cfg.semesterFolder||'FA2026';
 
     try{
       const wc = await fs.doc(`config/week_cfg_${activeWeek}`).get();
@@ -737,12 +739,21 @@ async function renderAdmin(){
   </div>
 
   <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
       <div class="ct" style="margin:0">📋 Week ${activeWeek} — Submissions</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn bh-" style="padding:5px 12px;font-size:12px" onclick="loadSubmissions()">↻ Refresh</button>
         <button class="btn bg-" style="padding:5px 12px;font-size:12px" onclick="exportCsv()">⬇ Export portfolios.csv</button>
       </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#F5F7FB;border:1.5px solid var(--border);border-radius:8px;margin-bottom:14px;flex-wrap:wrap">
+      <label style="font-size:12px;font-weight:600;color:#1E3A5F;white-space:nowrap">📁 Semester folder:</label>
+      <input type="text" id="sem-folder-input" value="${semesterFolder}"
+        style="width:120px;font-size:13px;font-weight:600;padding:5px 9px"
+        placeholder="e.g. FA2026">
+      <button class="btn bp-" style="padding:5px 14px;font-size:12px" onclick="saveSemesterFolder()">Save</button>
+      <span style="font-size:11px;color:#5A6E8A">Used in CSV filename and folder reminder (e.g. FA2026, SP2027)</span>
+      <span id="sem-folder-msg" style="font-size:11px;color:#059669"></span>
     </div>
     <div id="sub-table-wrap"><div class="msg in" style="font-size:12px">Loading…</div></div>
   </div>
@@ -774,7 +785,6 @@ async function loadSubmissions(){
 
     if(_cachedSubs.length===0){
       wrap.innerHTML='<div class="msg wn" style="font-size:12px">No submissions yet for Week '+activeWeek+'.</div>';
-      buildReturnInputs();
       return;
     }
 
@@ -786,21 +796,25 @@ async function loadSubmissions(){
         ${_usedEtfs.map(t=>`<th style="color:${ETFS.find(e=>e.id===t)?.color||'#5A6E8A'}">${t}</th>`).join('')}
         <th style="min-width:90px">Rationale</th>
         <th>Submitted</th>
+        <th></th>
       </tr></thead>
       <tbody>`;
     _cachedSubs.forEach((s,i)=>{
       const alloc = s.allocations||{};
       const ts = s.submittedAt ? new Date(s.submittedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
       const rid=`rat-${i}`;
+      const docId=s.id;
+      const label=`S${s.section}-T${String(s.team).padStart(2,'0')}-W${s.week||activeWeek}`;
       html += `<tr>
         <td style="font-weight:600">S${s.section}</td>
         <td style="font-weight:600">T${String(s.team).padStart(2,'0')}</td>
         ${_usedEtfs.map(t=>{const v=alloc[t]||0;return `<td style="text-align:right;color:${v>0?'#1E3A5F':'#94A3B8'}">${v>0?v+'%':'—'}</td>`;}).join('')}
         <td><button onclick="toggleRat('${rid}')" style="background:none;border:1px solid #C8D4E8;border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer;color:#1E40AF">View</button></td>
         <td style="color:#5A6E8A;font-size:11px">${ts}</td>
+        <td><button onclick="deleteSubmission('${docId}','${label}')" style="background:none;border:1px solid #FCA5A5;border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer;color:#DC2626" title="Delete this submission">🗑</button></td>
       </tr>
       <tr id="${rid}" hidden>
-        <td colspan="${3+_usedEtfs.length}" style="white-space:normal;background:#F5F7FB;color:#0F1E35;font-size:12px;padding:10px 12px;line-height:1.5">
+        <td colspan="${4+_usedEtfs.length}" style="white-space:normal;background:#F5F7FB;color:#0F1E35;font-size:12px;padding:10px 12px;line-height:1.5">
           <strong style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#5A6E8A">S${s.section} · T${String(s.team).padStart(2,'0')} Rationale</strong><br>${s.rationale||'—'}
         </td>
       </tr>`;
@@ -833,13 +847,13 @@ function exportCsv(){
   const blob=new Blob([csv],{type:'text/csv'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=url; a.download=`FA2026_W${activeWeek}_portfolios.csv`;
+  a.href=url; a.download=`${semesterFolder}_W${activeWeek}_portfolios.csv`;
   a.click(); URL.revokeObjectURL(url);
   // Show folder reminder
   const m=$('sub-table-wrap');
   const note=document.createElement('div');
   note.className='msg in'; note.style.fontSize='12px'; note.style.marginTop='10px';
-  note.innerHTML=`📁 Save the file to: <code style="background:#E8EDF5;padding:2px 6px;border-radius:4px">C:\\Users\\luisceballos\\My Drive\\Classes\\FINA402\\AI_portfolios\\FA2026\\</code><br>Then rename it to <code style="background:#E8EDF5;padding:2px 6px;border-radius:4px">portfolios.csv</code> before running generate_dashboard.py`;
+  note.innerHTML=`📁 Save to: <code style="background:#E8EDF5;padding:2px 6px;border-radius:4px">C:\\Users\\luisceballos\\My Drive\\Classes\\FINA402\\AI_portfolios\\${semesterFolder}\\</code><br>Then rename to <code style="background:#E8EDF5;padding:2px 6px;border-radius:4px">portfolios.csv</code> before running generate_dashboard.py`;
   if(m)m.appendChild(note);
 }
 
@@ -1069,6 +1083,35 @@ async function doChPw(){
     await fs.doc('config/settings').update({adminPassword:pw});
     adminPw=pw;if(m)m.innerHTML='<div class="msg ok">✓ Password updated.</div>';
   }catch(err){if(m)m.innerHTML=`<div class="msg er">Error: ${err.message}</div>`;}
+}
+
+/* ── Delete a submission ── */
+async function deleteSubmission(docId, label){
+  if(!confirm(`Delete submission ${label}?\n\nThis cannot be undone. The team will be able to submit again.`))return;
+  try{
+    await fs.doc(`submissions/${docId}`).delete();
+    loadSubmissions(); // refresh table
+    const m=$('advm');
+    if(m)m.innerHTML=`<div class="msg wn">🗑 Submission <strong>${label}</strong> deleted. The team can now resubmit.</div>`;
+  }catch(err){
+    alert('Error deleting submission: '+err.message);
+  }
+}
+
+/* ── Save semester folder setting ── */
+async function saveSemesterFolder(){
+  const val=($('sem-folder-input')?.value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const msg=$('sem-folder-msg');
+  if(!val){if(msg){msg.textContent='Enter a folder name.';msg.style.color='#DC2626';}return;}
+  try{
+    await fs.doc('config/settings').update({semesterFolder:val});
+    semesterFolder=val;
+    if(msg){msg.textContent=`✓ Saved as "${val}"`;msg.style.color='#059669';}
+    // Update the input to show sanitized value
+    const inp=$('sem-folder-input'); if(inp)inp.value=val;
+  }catch(err){
+    if(msg){msg.textContent='Error: '+err.message;msg.style.color='#DC2626';}
+  }
 }
 
 window.addEventListener('load',init);
