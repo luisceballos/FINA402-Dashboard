@@ -833,25 +833,52 @@ async function exportCsv(){
   const btn = document.querySelector('[onclick="exportCsv()"]');
   if(btn){btn.disabled=true; btn.textContent='⏳ Fetching all weeks…';}
   try{
-    // Fetch ALL submissions across every week (not just the active one)
+    // Fetch ALL student submissions across every week
     const sn = await fs.collection('submissions').get();
     const allSubs = sn.docs.map(d=>({id:d.id,...d.data()}))
                            .sort((a,b)=>(a.week-b.week)||a.section-b.section||a.team-b.team);
 
-    if(allSubs.length===0){
-      alert('No submissions found across any week.');
+    // Fetch AI benchmark allocations for each week (W1 … activeWeek)
+    const aiRows = []; // [{week, allocations:{...}}]
+    const aiPromises = [];
+    for(let w=1; w<=activeWeek; w++){
+      aiPromises.push(
+        fs.doc(`config/ai_week_${w}`).get().then(snap=>{
+          if(snap.exists){
+            const d=snap.data();
+            const alloc={};
+            ETFS.forEach(e=>{ const v=Number(d[e.id]); if(v>0) alloc[e.id]=v; });
+            if(Object.keys(alloc).length>0) aiRows.push({week:w, allocations:alloc});
+          }
+        }).catch(()=>{})
+      );
+    }
+    await Promise.all(aiPromises);
+    aiRows.sort((a,b)=>a.week-b.week);
+
+    if(allSubs.length===0 && aiRows.length===0){
+      alert('No submissions or AI allocations found.');
       return;
     }
 
-    // Gather all ETF tickers used across ALL weeks
+    // Gather all ETF tickers used across ALL rows (student + AI)
     const etfSet=new Set();
     allSubs.forEach(s=>Object.keys(s.allocations||{}).forEach(k=>{
       if((s.allocations[k]||0)>0) etfSet.add(k);
     }));
+    aiRows.forEach(r=>Object.keys(r.allocations||{}).forEach(k=>{
+      if((r.allocations[k]||0)>0) etfSet.add(k);
+    }));
     const cols=[...etfSet].sort();
 
-    // Row name includes week: S1-T01-W3
+    // Build CSV — AI rows first (one per week), then student rows
     let csv=','+cols.join(',')+'\n';
+    // AI benchmark rows: AI-W1, AI-W2, …
+    aiRows.forEach(r=>{
+      const vals=cols.map(t=>r.allocations?.[t]||0);
+      csv+=`AI-W${r.week},`+vals.join(',')+'\n';
+    });
+    // Student rows: S1-T01-W3, …
     allSubs.forEach(s=>{
       const row=`S${s.section}-T${String(s.team).padStart(2,'0')}-W${s.week}`;
       const vals=cols.map(t=>s.allocations?.[t]||0);
@@ -859,21 +886,45 @@ async function exportCsv(){
     });
 
     const blob=new Blob([csv],{type:'text/csv'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url; a.download=`${semesterFolder}_portfolios.csv`;
-    a.click(); URL.revokeObjectURL(url);
+    const filename=`${semesterFolder}_portfolios.csv`;
 
-    // Show folder reminder
+    // Try File System Access API (Chrome) — opens "Save As" dialog so user picks Allocations folder
+    // Chrome remembers the last location used, so second time it opens there automatically
+    let savedVia='download';
+    if(window.showSaveFilePicker){
+      try{
+        const fh=await window.showSaveFilePicker({
+          suggestedName: filename,
+          types:[{description:'CSV',accept:{'text/csv':['.csv']}}],
+        });
+        const writable=await fh.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        savedVia='picker';
+      }catch(e){
+        if(e.name==='AbortError'){return;} // user cancelled — don't show note
+        // Any other error → fall back to regular download
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
+      }
+    } else {
+      // Fallback for non-Chrome browsers
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
+    }
+
+    // Show confirmation note
     const m=$('sub-table-wrap');
-    // Remove any previous note
-    const old=m.querySelector('.export-note');
-    if(old)old.remove();
+    const oldNote=m.querySelector('.export-note');
+    if(oldNote)oldNote.remove();
     const note=document.createElement('div');
     note.className='msg ok export-note'; note.style.fontSize='12px'; note.style.marginTop='10px';
-    note.innerHTML=`✅ Exported <strong>${allSubs.length} rows across all weeks</strong> — row format: S1-T01-W3<br>
-      📁 Save to: <code style="background:#D1FAE5;padding:2px 6px;border-radius:4px">C:\\Users\\luisceballos\\My Drive\\Classes\\FINA402\\AI_portfolios\\Allocations\\</code><br>
-      Overwrite the existing file — all weeks (W1–W${activeWeek}) are included automatically. Then rename to <code style="background:#D1FAE5;padding:2px 6px;border-radius:4px">portfolios.csv</code> before running generate_dashboard.py`;
+    const savedMsg=savedVia==='picker'
+      ?`✅ Saved directly to the folder you chose`
+      :`✅ Downloaded — move it to your <code style="background:#D1FAE5;padding:2px 6px;border-radius:4px">Allocations</code> folder`;
+    note.innerHTML=`${savedMsg} as <code style="background:#D1FAE5;padding:2px 6px;border-radius:4px">${filename}</code><br>
+      <strong>${allSubs.length} student rows + ${aiRows.length} AI benchmark row${aiRows.length!==1?'s':''}</strong> (W1–W${activeWeek}) · format: AI-W1 · S1-T01-W3<br>
+      Then rename to <code style="background:#D1FAE5;padding:2px 6px;border-radius:4px">portfolios.csv</code> before running generate_dashboard.py`;
     if(m)m.appendChild(note);
   }catch(err){
     alert('Error exporting: '+err.message);
