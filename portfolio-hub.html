@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio Submission Hub — FINA 402</title>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --navy:#1E3A5F; --navy2:#2563EB; --gold:#C69214;
+  --bg:#EEF2F8; --card:#FFFFFF; --border:#C8D4E8; --text:#0F1E35; --muted:#5A6E8A;
+  --ok-bg:#ECFDF5; --ok-bd:#6EE7B7; --ok-tx:#065F46;
+  --wn-bg:#FFFBEB; --wn-bd:#FCD34D; --wn-tx:#78350F;
+  --er-bg:#FEF2F2; --er-bd:#FCA5A5; --er-tx:#991B1B;
+  --in-bg:#EFF6FF; --in-bd:#BFDBFE; --in-tx:#1E40AF;
+  --r:10px;
+}
+body { background:var(--bg); color:var(--text); font-family:'Inter',system-ui,sans-serif; min-height:100vh; }
+
+.hub-hdr { background:var(--navy); color:#fff; padding:13px 24px; display:flex; align-items:center; gap:16px; border-bottom:3px solid var(--gold); }
+.hub-hdr .brand { font-size:12px; color:rgba(255,255,255,.62); letter-spacing:.03em; }
+.hub-hdr h1 { font-size:18px; font-weight:700; flex:1; }
+.wk-chip { background:var(--gold); color:var(--navy); font-size:11px; font-weight:700; padding:4px 12px; border-radius:20px; white-space:nowrap; }
+.wk-chip.off { background:#94A3B8; color:#fff; }
+
+.body { max-width:900px; margin:0 auto; padding:22px 16px 48px; }
+
+.card { background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:20px 22px; margin-bottom:13px; }
+.ct { font-size:11px; font-weight:700; color:var(--navy); text-transform:uppercase; letter-spacing:.07em; margin-bottom:13px; }
+
+.r2 { display:flex; gap:14px; flex-wrap:wrap; }
+.f { flex:1; min-width:170px; }
+.f label { display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:5px; }
+select,textarea,input[type=text],input[type=password],input[type=number] {
+  width:100%; padding:8px 11px; border:1.5px solid var(--border); border-radius:8px;
+  font-family:inherit; font-size:14px; color:var(--text); background:#fff; outline:none; transition:border-color .15s;
+}
+select:focus,textarea:focus,input:focus { border-color:var(--navy2); }
+textarea { resize:vertical; min-height:90px; }
+
+.ag { display:grid; grid-template-columns:repeat(2,1fr); gap:9px; }
+@media(min-width:580px){ .ag { grid-template-columns:repeat(3,1fr); } }
+.ar { display:flex; flex-direction:column; gap:3px; }
+.ah { display:flex; justify-content:space-between; align-items:baseline; }
+.ah .tk { font-size:12px; font-weight:700; }
+.ah .sc { font-size:10px; color:var(--muted); }
+.ah .pc { font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
+.sr { display:flex; align-items:center; gap:6px; }
+input[type=range] { flex:1; height:4px; cursor:pointer; }
+.ni { width:48px; min-width:0; padding:3px 5px; text-align:right; font-size:12px; font-weight:600; border:1.5px solid var(--border); border-radius:6px; }
+.hint { font-size:10px; color:var(--muted); }
+
+.tb { display:flex; align-items:center; justify-content:space-between; padding:9px 14px; border-radius:8px; background:#F0F4FA; border:1.5px solid var(--border); margin-top:11px; }
+.tb.ok { background:var(--ok-bg); border-color:var(--ok-bd); }
+.tb.ov { background:var(--er-bg); border-color:var(--er-bd); }
+.tl { font-size:13px; font-weight:600; }
+.tn { font-size:17px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--muted); }
+.tn.ok { color:var(--ok-tx); } .tn.ov { color:var(--er-tx); }
+
+.cr { display:flex; align-items:center; gap:8px; margin-bottom:5px; }
+.cl { font-size:11px; font-weight:700; width:42px; }
+.cb { flex:1; display:flex; flex-direction:column; gap:2px; }
+.bl { display:flex; align-items:center; gap:5px; }
+.bt { flex:1; background:#E8EDF5; border-radius:3px; height:11px; overflow:hidden; }
+.bf { height:100%; border-radius:3px; transition:width .25s; }
+.bp { font-size:10px; font-variant-numeric:tabular-nums; width:28px; text-align:right; color:var(--muted); }
+.bg { font-size:9px; font-weight:700; width:20px; color:var(--muted); }
+
+.btn { padding:9px 20px; border:none; border-radius:8px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; transition:opacity .15s,transform .1s; }
+.btn:hover { opacity:.88; } .btn:active { transform:scale(.98); }
+.bp- { background:var(--navy); color:#fff; }
+.bg- { background:var(--gold); color:var(--navy); }
+.bh- { background:transparent; border:1.5px solid var(--border); color:var(--text); }
+.btn:disabled { opacity:.4; cursor:not-allowed; transform:none!important; }
+
+.msg { padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:11px; }
+.ok { background:var(--ok-bg); color:var(--ok-tx); border:1px solid var(--ok-bd); }
+.wn { background:var(--wn-bg); color:var(--wn-tx); border:1px solid var(--wn-bd); }
+.er { background:var(--er-bg); color:var(--er-tx); border:1px solid var(--er-bd); }
+.in { background:var(--in-bg); color:var(--in-tx); border:1px solid var(--in-bd); }
+
+.sr2 { display:flex; gap:11px; flex-wrap:wrap; margin-bottom:16px; }
+.sb { flex:1; min-width:90px; background:#F0F4FA; border-radius:8px; padding:13px; text-align:center; }
+.sn { font-size:24px; font-weight:700; color:var(--navy); }
+.sl { font-size:11px; color:var(--muted); margin-top:3px; }
+
+.ctable { width:100%; border-collapse:collapse; margin-bottom:14px; }
+.ctable th { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; padding:6px 8px; border-bottom:1.5px solid var(--border); text-align:left; }
+.ctable td { padding:5px 8px; border-bottom:1px solid #E8EDF5; vertical-align:middle; }
+.ctable tr:last-child td { border-bottom:none; }
+.ctable .cat-row td { background:#F5F7FB; font-size:10px; font-weight:700; color:var(--navy); text-transform:uppercase; letter-spacing:.08em; padding:5px 8px; border-bottom:1px solid var(--border); }
+.cat-all { font-size:10px; font-weight:600; color:var(--navy2); cursor:pointer; float:right; margin-left:6px; }
+.cat-all:hover { text-decoration:underline; }
+.etf-pill { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:700; }
+.etf-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+
+.con-box { display:flex; gap:16px; align-items:flex-end; padding:14px 16px; background:#F5F7FB; border:1.5px solid var(--border); border-radius:8px; margin-bottom:16px; flex-wrap:wrap; }
+.con-box .f { min-width:120px; flex:1; }
+.con-note { font-size:11px; color:var(--muted); align-self:center; flex:2; min-width:160px; }
+
+.sub-badge { display:inline-flex; align-items:center; gap:5px; background:var(--ok-bg); color:var(--ok-tx); border:1px solid var(--ok-bd); border-radius:20px; padding:3px 10px; font-size:11px; font-weight:600; }
+.active-chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+.achip { background:#F0F4FA; border:1px solid var(--border); border-radius:6px; padding:3px 9px; font-size:11px; font-weight:600; }
+
+.ftr { text-align:center; margin-top:18px; font-size:12px; color:var(--muted); }
+.ftr a { color:var(--muted); cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+.ftr a:hover { color:var(--navy); }
+
+#lov { position:fixed; inset:0; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; z-index:100; }
+.spin { width:32px; height:32px; border:3px solid var(--border); border-top-color:var(--navy); border-radius:50%; animation:sp .75s linear infinite; }
+@keyframes sp { to { transform:rotate(360deg); } }
+hr.div { border:none; border-top:1px solid var(--border); margin:18px 0; }
+
+/* modal */
+.modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200; display:flex; align-items:center; justify-content:center; padding:16px; }
+.modal { background:#fff; border-radius:12px; padding:24px; max-width:560px; width:100%; max-height:90vh; overflow-y:auto; }
+</style>
+</head>
+<body>
+
+<div id="lov"><div class="spin"></div><span style="color:#5A6E8A;font-size:13px">Loading hub…</span></div>
+
+<div id="app" hidden>
+  <header class="hub-hdr">
+    <div>
+      <div class="brand">USD Knauss School of Business · FINA 402 Investments</div>
+      <h1>Portfolio Submission Hub</h1>
+    </div>
+    <div id="wchip" class="wk-chip off">…</div>
+  </header>
+  <div class="body" id="body"></div>
+  <div class="ftr"><a onclick="openAdmin()">⚙ Instructor Access</a></div>
+</div>
+
+<!-- AI JSON Import Modal -->
+<div id="ai-modal" class="modal-bg" hidden>
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <strong style="font-size:15px;color:#1E3A5F">🤖 Generate AI Allocation</strong>
+      <button onclick="closeAiModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#5A6E8A">×</button>
+    </div>
+
+    <p style="font-size:12px;color:#5A6E8A;margin-bottom:10px"><strong>Step 1:</strong> Copy this prompt and paste it into Claude (claude.ai)</p>
+    <div style="position:relative">
+      <textarea id="ai-prompt-box" readonly style="min-height:120px;background:#F5F7FB;font-size:12px;font-family:monospace;color:#0F1E35"></textarea>
+      <button onclick="copyPrompt()" style="position:absolute;top:8px;right:8px;background:#1E3A5F;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer" id="copy-btn">Copy</button>
+    </div>
+
+    <p style="font-size:12px;color:#5A6E8A;margin:14px 0 6px"><strong>Step 2:</strong> Paste Claude's JSON response here</p>
+    <textarea id="ai-json-paste" style="min-height:90px;font-family:monospace;font-size:12px" placeholder='{"allocations":{"SPY":15,"XLK":20,...},"rationale":"..."}'></textarea>
+
+    <div id="modal-msg" style="margin-top:8px"></div>
+    <div style="display:flex;gap:9px;margin-top:14px">
+      <button class="btn bp-" onclick="loadAiJson()">Load Allocation</button>
+      <button class="btn bh-" onclick="closeAiModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════
+   FIREBASE CONFIG
+   Replace all values below with YOUR project's config
+   from Firebase Console → Project Settings → Web App
+══════════════════════════════════════════════════ */
+const firebaseConfig = {
+  apiKey:            "PASTE_YOUR_API_KEY_HERE",
+  authDomain:        "PASTE_YOUR_PROJECT_ID.firebaseapp.com",
+  projectId:         "PASTE_YOUR_PROJECT_ID",
+  storageBucket:     "PASTE_YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "PASTE_YOUR_SENDER_ID",
+  appId:             "PASTE_YOUR_APP_ID"
+};
+
+firebase.initializeApp(firebaseConfig);
+const fs = firebase.firestore();
+
+/* ══════════════════════════════════════════════════
+   ETF UNIVERSE — mirrors generate_dashboard.py
+   + MBB (Mortgage-Backed) and TIP (TIPS)
+══════════════════════════════════════════════════ */
+const ETFS = [
+  {id:'SPY',  name:'SPDR S&P 500 ETF',             color:'#1E3A5F', cat:'Broad Market'},
+  {id:'QQQ',  name:'Invesco Nasdaq-100',            color:'#2563EB', cat:'Broad Market'},
+  {id:'IWM',  name:'iShares Russell 2000',          color:'#60A5FA', cat:'Broad Market'},
+  {id:'DIA',  name:'SPDR Dow Jones 30',             color:'#93C5FD', cat:'Broad Market'},
+  {id:'XLK',  name:'Technology',                   color:'#3B82F6', cat:'Sectors (SPDR)'},
+  {id:'XLF',  name:'Financials',                   color:'#16A34A', cat:'Sectors (SPDR)'},
+  {id:'XLE',  name:'Energy',                        color:'#EA580C', cat:'Sectors (SPDR)'},
+  {id:'XLV',  name:'Health Care',                  color:'#7C3AED', cat:'Sectors (SPDR)'},
+  {id:'XLY',  name:'Consumer Discret.',             color:'#DB2777', cat:'Sectors (SPDR)'},
+  {id:'XLP',  name:'Consumer Staples',              color:'#0891B2', cat:'Sectors (SPDR)'},
+  {id:'XLU',  name:'Utilities',                     color:'#D97706', cat:'Sectors (SPDR)'},
+  {id:'XLB',  name:'Materials',                     color:'#059669', cat:'Sectors (SPDR)'},
+  {id:'XLI',  name:'Industrials',                   color:'#6366F1', cat:'Sectors (SPDR)'},
+  {id:'XLRE', name:'Real Estate',                   color:'#BE185D', cat:'Sectors (SPDR)'},
+  {id:'XLC',  name:'Comm. Services',                color:'#DC2626', cat:'Sectors (SPDR)'},
+  {id:'SSO',  name:'ProShares 2x S&P 500',          color:'#EF4444', cat:'Leveraged'},
+  {id:'UPRO', name:'ProShares 3x S&P 500',          color:'#DC2626', cat:'Leveraged'},
+  {id:'QLD',  name:'ProShares 2x Nasdaq-100',       color:'#F87171', cat:'Leveraged'},
+  {id:'TQQQ', name:'ProShares 3x Nasdaq-100',       color:'#FCA5A5', cat:'Leveraged'},
+  {id:'SH',   name:'Short S&P 500 (−1x)',           color:'#7F1D1D', cat:'Inverse'},
+  {id:'SDS',  name:'UltraShort S&P 500 (−2x)',      color:'#450A0A', cat:'Inverse'},
+  {id:'PSQ',  name:'Short Nasdaq (−1x)',             color:'#6B21A8', cat:'Inverse'},
+  {id:'SQQQ', name:'UltraPro Short QQQ (−3x)',      color:'#3B0764', cat:'Inverse'},
+  {id:'TLT',  name:'iShares 20+ Yr Treasury',       color:'#4338CA', cat:'Bonds Gov'},
+  {id:'IEF',  name:'iShares 7-10 Yr Treasury',      color:'#4F46E5', cat:'Bonds Gov'},
+  {id:'SHY',  name:'iShares 1-3 Yr Treasury',       color:'#818CF8', cat:'Bonds Gov'},
+  {id:'BIL',  name:'SPDR 1-3 Month T-Bill',         color:'#94A3B8', cat:'Bonds Gov'},
+  {id:'TIP',  name:'iShares TIPS (Inflation Prot)', color:'#C084FC', cat:'Bonds Gov'},
+  {id:'LQD',  name:'iShares IG Corporate Bond',     color:'#1D4ED8', cat:'Bonds Corp IG'},
+  {id:'AGG',  name:'iShares US Aggregate Bond',     color:'#1E40AF', cat:'Bonds Corp IG'},
+  {id:'BND',  name:'Vanguard Total Bond Market',    color:'#1E3A8A', cat:'Bonds Corp IG'},
+  {id:'MBB',  name:'iShares Mortgage-Backed Sec.',  color:'#3730A3', cat:'Bonds Corp IG'},
+  {id:'HYG',  name:'iShares High Yield Corp Bond',  color:'#9333EA', cat:'Bonds Corp HY'},
+  {id:'JNK',  name:'SPDR Bloomberg HY Bond',        color:'#A855F7', cat:'Bonds Corp HY'},
+  {id:'SGOV', name:'iShares 0-3 Month Treasury',    color:'#64748B', cat:'Cash'},
+  {id:'GBIL', name:'Goldman Sachs 0-1 Yr Treasury', color:'#94A3B8', cat:'Cash'},
+];
+
+const DEFAULT_ACTIVE = ['SPY','XLK','XLF','XLE','XLV','XLY','XLP','XLU','XLB','XLI','XLRE','XLC'];
+
+/* ── state ── */
+let activeWeek=null, adminPw=null;
+let aiAlloc=null, aiRationale='';
+let weekCfg  = {activeAssets:[...DEFAULT_ACTIVE], globalMin:0, globalMax:100};
+let userAlloc  = Object.fromEntries(ETFS.map(e=>[e.id,0]));
+let adminAlloc = Object.fromEntries(ETFS.map(e=>[e.id,0]));
+let adminCfg   = {activeAssets:[...DEFAULT_ACTIVE], globalMin:0, globalMax:100};
+let adminAuth  = false;
+
+const $  = id => document.getElementById(id);
+const clamp = (v,lo,hi) => Math.max(lo, Math.min(hi, v));
+const sumActive = (alloc,cfg) => activeEtfs(cfg).reduce((s,e)=>s+(Number(alloc[e.id])||0),0);
+function activeEtfs(cfg){ return ETFS.filter(e=>(cfg.activeAssets||DEFAULT_ACTIVE).includes(e.id)); }
+function catList(){ return [...new Set(ETFS.map(e=>e.cat))]; }
+
+/* ══════════ INIT ══════════ */
+async function init(){
+  if(firebaseConfig.apiKey.startsWith('PASTE')){
+    $('lov').innerHTML=`<div style="max-width:420px;padding:32px;text-align:center">
+      <div style="font-size:36px;margin-bottom:12px">⚙️</div>
+      <p style="font-size:16px;font-weight:700;color:#1E3A5F;margin-bottom:8px">Firebase Not Configured</p>
+      <p style="font-size:13px;color:#5A6E8A">Open <code>index.html</code> and replace the Firebase config values at the top of the script with your project credentials.</p>
+    </div>`;
+    return;
+  }
+  try{
+    const snap = await fs.doc('config/settings').get();
+    if(!snap.exists){ showNotReady(); return; }
+    const cfg = snap.data();
+    activeWeek = cfg.activeWeek||1;
+    adminPw    = cfg.adminPassword||'';
+
+    try{
+      const wc = await fs.doc(`config/week_cfg_${activeWeek}`).get();
+      if(wc.exists){
+        const d=wc.data();
+        weekCfg={activeAssets:d.activeAssets||[...DEFAULT_ACTIVE],globalMin:Number(d.globalMin)||0,globalMax:Number(d.globalMax)||100};
+      }
+    }catch(_){}
+
+    try{
+      const ai = await fs.doc(`config/ai_week_${activeWeek}`).get();
+      if(ai.exists){
+        const d=ai.data();
+        aiRationale=d.rationale||'';
+        aiAlloc={};
+        ETFS.forEach(e=>{ aiAlloc[e.id]=Number(d[e.id])||0; });
+      }
+    }catch(_){}
+
+    $('lov').hidden=true; $('app').hidden=false;
+    updateChip(); renderForm();
+  }catch(err){
+    $('lov').innerHTML=`<p style="color:#DC2626;padding:24px;text-align:center">Error: ${err.message}</p>`;
+  }
+}
+
+function updateChip(){
+  const c=$('wchip');
+  if(!activeWeek){c.textContent='Not configured';c.className='wk-chip off';return;}
+  c.textContent=`Week ${activeWeek} — Open`; c.className='wk-chip';
+}
+
+/* ══════════ NOT READY ══════════ */
+function showNotReady(){
+  $('lov').hidden=true; $('app').hidden=false;
+  $('body').innerHTML=`<div class="card" style="text-align:center;padding:40px">
+    <div style="font-size:32px;margin-bottom:12px">📋</div>
+    <p style="font-size:16px;font-weight:600;color:#1E3A5F;margin-bottom:8px">Hub Not Yet Configured</p>
+    <p style="color:#5A6E8A;font-size:14px">Your instructor hasn't opened the first submission week yet. Check back soon.</p>
+  </div>`; updateChip();
+}
+
+/* ══════════ STUDENT FORM ══════════ */
+function renderForm(){
+  const active=activeEtfs(weekCfg);
+  const gMin=weekCfg.globalMin, gMax=weekCfg.globalMax;
+  const chips=active.map(e=>`<span class="achip" style="color:${e.color};border-color:${e.color}22">${e.id}</span>`).join('');
+  const limitNote=(gMin>0||gMax<100)
+    ?`<div class="msg wn" style="margin-bottom:13px">⚠ Each ETF must be between <strong>${gMin}%</strong> and <strong>${gMax}%</strong>.</div>`:'' ;
+  const aiNote=aiAlloc
+    ?`<div class="msg in" style="margin-bottom:13px"><strong>Week ${activeWeek} AI Benchmark</strong> shown below each ETF. Allocate exactly 100%.</div>`
+    :`<div class="msg wn" style="margin-bottom:13px">No AI benchmark set for this week yet. Allocate exactly 100%.</div>`;
+
+  $('body').innerHTML=`
+  <div class="card">
+    <div class="ct">Team Identification</div>
+    <div class="r2">
+      <div class="f"><label>Section</label>
+        <select id="ss" onchange="onTC()">
+          <option value="">— Select your section —</option>
+          ${[1,2,3,4].map(s=>`<option value="${s}">Section ${s}</option>`).join('')}
+        </select></div>
+      <div class="f"><label>Team</label>
+        <select id="st" onchange="onTC()">
+          <option value="">— Select your team —</option>
+          ${Array.from({length:15},(_,i)=>`<option value="${i+1}">Team ${i+1}</option>`).join('')}
+        </select></div>
+    </div>
+    <div id="id-msg"></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px">
+      <div class="ct" style="margin:0">Portfolio Allocation — Week ${activeWeek}</div>
+      <div id="sub-badge"></div>
+    </div>
+    <div class="active-chips">${chips}</div>
+    ${limitNote}${aiNote}
+    <div class="ag" id="sg"></div>
+    <div class="tb" id="tb"><span class="tl">Portfolio Total</span><span class="tn" id="tn">0%</span></div>
+  </div>
+
+  ${aiAlloc?`<div class="card">
+    <div class="ct">Your Allocation vs. AI Benchmark</div>
+    <p style="font-size:12px;color:#5A6E8A;margin-bottom:13px">${aiRationale||'Solid = your pick · Faded = AI benchmark.'}</p>
+    <div id="cbars"></div>
+  </div>`:''}
+
+  <div class="card">
+    <div class="ct">Investment Rationale</div>
+    <div class="f"><label>Explain your strategy — sector outlook, risk/return, macro thesis (min 40 chars)</label>
+      <textarea id="rat" placeholder="We are overweighting Technology because…"></textarea></div>
+  </div>
+
+  <div id="fm"></div>
+  <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:8px">
+    <button class="btn bp-" id="sb" onclick="doSubmit()">Submit Allocation</button>
+  </div>`;
+
+  buildSliders('sg',userAlloc,weekCfg,false);
+  if(aiAlloc) buildCmpBars();
+}
+
+/* ── sliders ── */
+function buildSliders(gridId,allocObj,cfg,isAdmin){
+  const grid=$(gridId); if(!grid)return;
+  const active=activeEtfs(cfg);
+  const gMin=cfg.globalMin||0, gMax=cfg.globalMax||100;
+  const prefix=isAdmin?'a':'u';
+  grid.innerHTML=active.map(e=>{
+    const v=allocObj[e.id]||0;
+    const ai=(aiAlloc&&!isAdmin)?(aiAlloc[e.id]||0):null;
+    return `<div class="ar" id="${prefix}row-${e.id}">
+      <div class="ah">
+        <div><span class="tk" style="color:${e.color}">${e.id}</span><span class="sc"> ${e.name}</span></div>
+        <span class="pc" id="${prefix}pc-${e.id}">${v}%</span>
+      </div>
+      <div class="sr">
+        <input type="range" min="${gMin}" max="${gMax}" step="1" value="${clamp(v,gMin,gMax)}"
+          style="accent-color:${e.color}"
+          oninput="${isAdmin?`aSlide('${e.id}',this.value)`:`uSlide('${e.id}',this.value)`}">
+        <input type="number" min="${gMin}" max="${gMax}" step="1" value="${v}"
+          class="ni" id="${prefix}ni-${e.id}"
+          oninput="${isAdmin?`aNum('${e.id}',this.value)`:`uNum('${e.id}',this.value)`}">
+      </div>
+      ${ai!==null?`<div class="hint">AI benchmark: <strong style="color:${e.color}">${ai}%</strong></div>`:''}
+    </div>`;
+  }).join('');
+  isAdmin?updAdmTotal():updTotal();
+}
+
+function uSlide(id,val){
+  const gMin=weekCfg.globalMin||0, gMax=weekCfg.globalMax||100;
+  val=clamp(parseInt(val)||0,gMin,gMax);
+  userAlloc[id]=val;
+  const n=$(`uni-${id}`); if(n)n.value=val;
+  const p=$(`upc-${id}`); if(p)p.textContent=val+'%';
+  updTotal(); if(aiAlloc)updCmp();
+}
+function uNum(id,val){
+  const gMin=weekCfg.globalMin||0, gMax=weekCfg.globalMax||100;
+  val=clamp(parseInt(val)||0,gMin,gMax);
+  userAlloc[id]=val;
+  const r=document.querySelector(`#sg input[type=range][oninput*="'${id}'"]`); if(r)r.value=val;
+  const p=$(`upc-${id}`); if(p)p.textContent=val+'%';
+  updTotal(); if(aiAlloc)updCmp();
+}
+function updTotal(){
+  const t=sumActive(userAlloc,weekCfg);
+  const tn=$('tn'),tb=$('tb'); if(!tn)return;
+  tn.textContent=t+'%';
+  tn.className=t===100?'tn ok':t>100?'tn ov':'tn';
+  if(tb)tb.className=t===100?'tb ok':t>100?'tb ov':'tb';
+}
+
+function buildCmpBars(){
+  const c=$('cbars'); if(!c||!aiAlloc)return;
+  const active=activeEtfs(weekCfg);
+  c.innerHTML=active.map(e=>{
+    const ai=aiAlloc[e.id]||0, u=userAlloc[e.id]||0;
+    return `<div class="cr">
+      <span class="cl" style="color:${e.color}">${e.id}</span>
+      <div class="cb">
+        <div class="bl">
+          <div class="bt"><div class="bf" style="width:${u}%;background:${e.color}" id="cu-${e.id}"></div></div>
+          <span class="bp" style="color:#1E3A5F;font-weight:600" id="cup-${e.id}">${u}%</span>
+          <span class="bg" style="color:#1E3A5F">You</span>
+        </div>
+        <div class="bl">
+          <div class="bt"><div class="bf" style="width:${ai}%;background:${e.color};opacity:.32"></div></div>
+          <span class="bp">${ai}%</span><span class="bg">AI</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function updCmp(){
+  activeEtfs(weekCfg).forEach(e=>{
+    const u=userAlloc[e.id]||0;
+    const b=$(`cu-${e.id}`); if(b)b.style.width=u+'%';
+    const p=$(`cup-${e.id}`); if(p)p.textContent=u+'%';
+  });
+}
+
+/* ── check existing submission ── */
+async function onTC(){
+  const sec=$('ss')?.value, tm=$('st')?.value;
+  if(!sec||!tm)return;
+  try{
+    const snap=await fs.doc(`submissions/S${sec}-T${tm}-W${activeWeek}`).get();
+    const badge=$('sub-badge'), btn=$('sb'), idm=$('id-msg');
+    if(snap.exists){
+      const d=snap.data();
+      const ts=d.submittedAt?new Date(d.submittedAt).toLocaleString():'—';
+      if(idm)idm.innerHTML=`<div class="msg wn" style="margin-top:10px">⚠ <strong>Already submitted Week ${activeWeek}.</strong> Last saved: ${ts}. You can update below.</div>`;
+      if(badge)badge.innerHTML='<span class="sub-badge">✓ Submitted</span>';
+      if(btn)btn.textContent='Update Submission';
+      activeEtfs(weekCfg).forEach(e=>{
+        const v=Number(d.allocations?.[e.id])||0;
+        userAlloc[e.id]=v;
+        const r=document.querySelector(`#sg input[type=range][oninput*="'${e.id}'"]`);
+        if(r)r.value=v;
+        const n=$(`uni-${e.id}`); if(n)n.value=v;
+        const p=$(`upc-${e.id}`); if(p)p.textContent=v+'%';
+      });
+      const rat=$('rat'); if(rat)rat.value=d.rationale||'';
+      updTotal(); if(aiAlloc)updCmp();
+    } else {
+      if(idm)idm.innerHTML='';
+      if(badge)badge.innerHTML='';
+      if(btn)btn.textContent='Submit Allocation';
+    }
+  }catch(err){
+    const idm=$('id-msg');
+    if(idm)idm.innerHTML=`<div class="msg er" style="margin-top:10px">Error: ${err.message}</div>`;
+  }
+}
+
+/* ── submit ── */
+async function doSubmit(){
+  const sec=$('ss')?.value, tm=$('st')?.value, fm=$('fm');
+  if(!sec||!tm){if(fm)fm.innerHTML='<div class="msg er">Select your section and team first.</div>';return;}
+  const active=activeEtfs(weekCfg);
+  const gMin=weekCfg.globalMin||0, gMax=weekCfg.globalMax||100;
+  if(gMin>0||gMax<100){
+    const viol=active.filter(e=>{const v=userAlloc[e.id]||0;return v<gMin||v>gMax;})
+                     .map(e=>`${e.id}: ${userAlloc[e.id]||0}% (must be ${gMin}–${gMax}%)`);
+    if(viol.length){if(fm)fm.innerHTML=`<div class="msg er"><strong>Constraint violations:</strong><br>${viol.join('<br>')}</div>`;return;}
+  }
+  const t=sumActive(userAlloc,weekCfg);
+  if(t!==100){if(fm)fm.innerHTML=`<div class="msg er">Total is <strong>${t}%</strong>. Must equal exactly 100%.</div>`;return;}
+  const rat=$('rat')?.value.trim()||'';
+  if(rat.length<40){if(fm)fm.innerHTML='<div class="msg er">Write a rationale of at least 40 characters.</div>';return;}
+  const btn=$('sb'); if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{
+    const allocToSave=Object.fromEntries(active.map(e=>[e.id,userAlloc[e.id]||0]));
+    await fs.doc(`submissions/S${sec}-T${tm}-W${activeWeek}`).set({
+      section:Number(sec),team:Number(tm),week:activeWeek,
+      allocations:allocToSave,rationale:rat,
+      submittedAt:new Date().toISOString(),
+    });
+    if(fm)fm.innerHTML=`<div class="msg ok">✓ <strong>Saved!</strong> Section ${sec} · Team ${tm} · Week ${activeWeek}.</div>`;
+    const badge=$('sub-badge'); if(badge)badge.innerHTML='<span class="sub-badge">✓ Submitted</span>';
+    if(btn){btn.disabled=false;btn.textContent='Update Submission';}
+  }catch(err){
+    if(fm)fm.innerHTML=`<div class="msg er">Error: ${err.message}</div>`;
+    if(btn){btn.disabled=false;btn.textContent='Submit Allocation';}
+  }
+}
+
+/* ══════════ ADMIN ══════════ */
+function openAdmin(){
+  if(adminAuth){renderAdmin();return;}
+  $('body').innerHTML=`<div class="card" style="max-width:400px;margin:0 auto">
+    <div class="ct">Instructor Access</div>
+    <div class="f" style="margin-bottom:13px"><label>Admin Password</label>
+      <input type="password" id="apw" placeholder="Enter password" onkeydown="if(event.key==='Enter')checkPw()"></div>
+    <div id="pwm"></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn bp-" onclick="checkPw()">Sign In</button>
+      <button class="btn bh-" onclick="renderForm()">Cancel</button>
+    </div>
+  </div>`;
+  setTimeout(()=>$('apw')?.focus(),50);
+}
+
+async function checkPw(){
+  if(!adminPw){
+    if(($('apw')?.value||'')==='FINA402setup'){renderSetup();return;}
+    const m=$('pwm'); if(m)m.innerHTML='<div class="msg er">Hub not configured. Use the setup code.</div>'; return;
+  }
+  if(($('apw')?.value||'')===adminPw){
+    adminAuth=true;
+    adminAlloc=aiAlloc?{...aiAlloc}:Object.fromEntries(ETFS.map(e=>[e.id,0]));
+    adminCfg={activeAssets:[...weekCfg.activeAssets],globalMin:weekCfg.globalMin,globalMax:weekCfg.globalMax};
+    renderAdmin();
+  } else {
+    const m=$('pwm'); if(m)m.innerHTML='<div class="msg er">Incorrect password.</div>';
+  }
+}
+
+function renderSetup(){
+  $('body').innerHTML=`<div class="card">
+    <div class="ct">First-Time Setup</div>
+    <div class="msg in" style="margin-bottom:13px">Set an admin password and open Week 1.</div>
+    <div class="r2" style="margin-bottom:13px">
+      <div class="f"><label>Admin Password</label><input type="password" id="s1" placeholder="Choose a password"></div>
+      <div class="f"><label>Confirm</label><input type="password" id="s2" placeholder="Repeat"></div>
+    </div>
+    <div id="sm"></div>
+    <button class="btn bp-" onclick="doSetup()">Initialize Hub &amp; Open Week 1</button>
+  </div>`;
+}
+async function doSetup(){
+  const pw=$('s1')?.value.trim(),pw2=$('s2')?.value.trim(),m=$('sm');
+  if(!pw){if(m)m.innerHTML='<div class="msg er">Enter a password.</div>';return;}
+  if(pw!==pw2){if(m)m.innerHTML='<div class="msg er">Passwords do not match.</div>';return;}
+  try{
+    await fs.doc('config/settings').set({activeWeek:1,adminPassword:pw});
+    adminPw=pw;activeWeek=1;adminAuth=true;
+    adminAlloc=Object.fromEntries(ETFS.map(e=>[e.id,0]));
+    adminCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100};
+    weekCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100};
+    updateChip();renderAdmin();
+  }catch(err){if(m)m.innerHTML=`<div class="msg er">Error: ${err.message}</div>`;}
+}
+
+/* ── admin main ── */
+async function renderAdmin(){
+  const counts={1:0,2:0,3:0,4:0}; let tot=0;
+  try{
+    const sn=await fs.collection('submissions').where('week','==',activeWeek).get();
+    sn.docs.forEach(d=>{const s=d.data().section;if(s>=1&&s<=4){counts[s]++;tot++;}});
+  }catch(_){}
+
+  $('body').innerHTML=`
+  <div class="card" style="border-left:4px solid #C69214">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px">
+      <div class="ct" style="margin:0">Admin Panel</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn bh-" style="padding:5px 12px;font-size:12px" onclick="renderForm()">← Student View</button>
+        <button class="btn bh-" style="padding:5px 12px;font-size:12px" onclick="showCpw()">Change Password</button>
+      </div>
+    </div>
+    <div class="sr2">
+      <div class="sb"><div class="sn">${activeWeek}</div><div class="sl">Active Week</div></div>
+      <div class="sb"><div class="sn">${tot}</div><div class="sl">Total Submissions</div></div>
+      ${[1,2,3,4].map(s=>`<div class="sb"><div class="sn">${counts[s]}</div><div class="sl">Section ${s}</div></div>`).join('')}
+    </div>
+    <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:18px">
+      <button class="btn bg-" onclick="advWeek()">→ Open Week ${activeWeek+1}</button>
+    </div>
+    <div id="advm"></div>
+    <div id="cpw-wrap" hidden>
+      <hr class="div">
+      <div class="ct">Change Password</div>
+      <div class="r2" style="margin-bottom:11px">
+        <div class="f"><label>New Password</label><input type="password" id="npw"></div>
+        <div class="f"><label>Confirm</label><input type="password" id="npw2"></div>
+      </div>
+      <div id="cpm"></div>
+      <button class="btn bp-" onclick="doChPw()">Update Password</button>
+      <hr class="div">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ct">Week ${activeWeek} — Available Assets &amp; Constraint</div>
+    <p style="font-size:12px;color:#5A6E8A;margin-bottom:14px">Select ETFs available this week and set an optional global min/max that applies to every ETF equally.</p>
+    <div class="con-box">
+      <div class="f">
+        <label>Min % per ETF</label>
+        <input type="number" id="g-min" min="0" max="99" step="1"
+          value="${adminCfg.globalMin||''}" placeholder="0" oninput="onGlobalConChange()">
+      </div>
+      <div class="f">
+        <label>Max % per ETF</label>
+        <input type="number" id="g-max" min="1" max="100" step="1"
+          value="${adminCfg.globalMax<100?adminCfg.globalMax:''}" placeholder="100" oninput="onGlobalConChange()">
+      </div>
+      <div class="con-note">Leave blank for no limit (0–100%). Same bounds apply to all selected ETFs.</div>
+    </div>
+    <div id="cfg-msg2" style="margin-bottom:8px"></div>
+    <table class="ctable">
+      <thead><tr><th style="width:36px">On</th><th>ETF</th></tr></thead>
+      <tbody id="cfg-tbl"></tbody>
+    </table>
+    <div id="cfg-msg"></div>
+    <button class="btn bp-" onclick="saveCfg()">Save Assets &amp; Constraint</button>
+  </div>
+
+  <div class="card">
+    <div class="ct">Week ${activeWeek} — AI Benchmark Allocation</div>
+    <div style="background:#F5F7FB;border:1.5px solid #C8D4E8;border-radius:8px;padding:14px 16px;margin-bottom:16px">
+      <label style="font-size:12px;font-weight:700;color:#1E3A5F;display:block;margin-bottom:4px">
+        🤖 Generate with Claude
+        <span style="font-size:11px;font-weight:400;color:#5A6E8A"> — describe your macro thesis</span>
+      </label>
+      <p style="font-size:11px;color:#5A6E8A;margin-bottom:8px">Write your prompt below. Click "Generate Prompt" to get the formatted text to paste into Claude, then import the JSON response back here. The prompt is never shown to students.</p>
+      <textarea id="ai-prompt-input" style="min-height:70px;margin-bottom:9px"
+        placeholder="e.g. Overweight defensive sectors given elevated rates and slowing growth. Focus on XLV, XLP, XLU."></textarea>
+      <button class="btn bg-" onclick="openAiModal()" style="padding:8px 18px">🤖 Generate Prompt &amp; Import JSON</button>
+    </div>
+    ${aiAlloc
+      ?`<p style="font-size:12px;color:#5A6E8A;margin-bottom:12px">Review sliders then save.</p>`
+      :`<div class="msg wn" style="margin-bottom:12px">No AI allocation set yet. Generate or fill manually.</div>`}
+    <div class="ag" id="asg"></div>
+    <div class="tb" id="atb"><span class="tl">Total</span><span class="tn" id="atn">0%</span></div>
+    <div class="f" style="margin-top:13px">
+      <label>AI Rationale <span style="font-weight:400;font-size:11px;color:#5A6E8A">(shown to students)</span></label>
+      <textarea id="arat" style="min-height:75px" placeholder="Explain the reasoning…">${aiRationale}</textarea>
+    </div>
+    <div id="aim"></div>
+    <button class="btn bp-" onclick="saveAI()" style="margin-top:10px">Save AI Allocation for Week ${activeWeek}</button>
+  </div>`;
+
+  buildCfgTable();
+  buildSliders('asg',adminAlloc,adminCfg,true);
+}
+
+/* ── global constraint ── */
+function onGlobalConChange(){
+  adminCfg.globalMin=parseInt($('g-min')?.value)||0;
+  adminCfg.globalMax=parseInt($('g-max')?.value)||100;
+  buildSliders('asg',adminAlloc,adminCfg,true);
+}
+
+/* ── asset picker table ── */
+function buildCfgTable(){
+  const tb=$('cfg-tbl'); if(!tb)return;
+  let html='';
+  catList().forEach(cat=>{
+    const etfsInCat=ETFS.filter(e=>e.cat===cat);
+    html+=`<tr class="cat-row"><td colspan="2">${cat}
+      <span class="cat-all" onclick="toggleCat('${cat}',true)">All</span>
+      <span class="cat-all" style="margin-right:4px" onclick="toggleCat('${cat}',false)">None</span>
+    </td></tr>`;
+    etfsInCat.forEach(e=>{
+      const active=adminCfg.activeAssets.includes(e.id);
+      html+=`<tr id="cfgr-${e.id}">
+        <td><input type="checkbox" id="chk-${e.id}" ${active?'checked':''}
+          onchange="onChkChange('${e.id}')"></td>
+        <td><span class="etf-pill">
+          <span class="etf-dot" style="background:${e.color}"></span>
+          <strong style="color:${e.color}">${e.id}</strong>
+          <span style="color:#5A6E8A;font-size:11px"> ${e.name}</span>
+        </span></td>
+      </tr>`;
+    });
+  });
+  tb.innerHTML=html;
+  updateCfgCounter();
+}
+
+function updateCfgCounter(){
+  const m=$('cfg-msg2');
+  if(m)m.innerHTML=`<div class="msg in" style="padding:7px 12px;font-size:12px;margin-bottom:0">
+    <strong>${adminCfg.activeAssets.length}</strong> ETF${adminCfg.activeAssets.length!==1?'s':''} selected for Week ${activeWeek}.
+  </div>`;
+}
+
+function toggleCat(cat,on){
+  const ids=ETFS.filter(e=>e.cat===cat).map(e=>e.id);
+  if(on){ids.forEach(id=>{if(!adminCfg.activeAssets.includes(id))adminCfg.activeAssets.push(id);});
+  }else{adminCfg.activeAssets=adminCfg.activeAssets.filter(id=>!ids.includes(id));}
+  buildCfgTable(); buildSliders('asg',adminAlloc,adminCfg,true);
+}
+
+function onChkChange(id){
+  const chk=$(`chk-${id}`);
+  if(chk?.checked){if(!adminCfg.activeAssets.includes(id))adminCfg.activeAssets.push(id);
+  }else{adminCfg.activeAssets=adminCfg.activeAssets.filter(x=>x!==id);}
+  updateCfgCounter(); buildSliders('asg',adminAlloc,adminCfg,true);
+}
+
+async function saveCfg(){
+  const m=$('cfg-msg');
+  if(adminCfg.activeAssets.length===0){if(m)m.innerHTML='<div class="msg er">Select at least one ETF.</div>';return;}
+  const gMin=adminCfg.globalMin||0, gMax=adminCfg.globalMax||100;
+  if(gMin>=gMax){if(m)m.innerHTML=`<div class="msg er">Min (${gMin}%) must be less than max (${gMax}%).</div>`;return;}
+  try{
+    await fs.doc(`config/week_cfg_${activeWeek}`).set({
+      activeAssets:adminCfg.activeAssets, globalMin:gMin, globalMax:gMax,
+    });
+    weekCfg={...adminCfg};
+    if(m)m.innerHTML=`<div class="msg ok">✓ Saved — ${adminCfg.activeAssets.length} ETFs, range ${gMin}–${gMax}%.</div>`;
+  }catch(err){if(m)m.innerHTML=`<div class="msg er">Error: ${err.message}</div>`;}
+}
+
+/* ── admin slider events ── */
+function aSlide(id,val){
+  const gMin=adminCfg.globalMin||0, gMax=adminCfg.globalMax||100;
+  val=clamp(parseInt(val)||0,gMin,gMax);
+  adminAlloc[id]=val;
+  const n=$(`ani-${id}`); if(n)n.value=val;
+  const p=$(`apc-${id}`); if(p)p.textContent=val+'%';
+  updAdmTotal();
+}
+function aNum(id,val){
+  const gMin=adminCfg.globalMin||0, gMax=adminCfg.globalMax||100;
+  val=clamp(parseInt(val)||0,gMin,gMax);
+  adminAlloc[id]=val;
+  const r=document.querySelector(`#asg input[type=range][oninput*="'${id}'"]`); if(r)r.value=val;
+  const p=$(`apc-${id}`); if(p)p.textContent=val+'%';
+  updAdmTotal();
+}
+function updAdmTotal(){
+  const t=sumActive(adminAlloc,adminCfg);
+  const tn=$('atn'),tb=$('atb'); if(!tn)return;
+  tn.textContent=t+'%'; tn.className=t===100?'tn ok':t>100?'tn ov':'tn';
+  if(tb)tb.className=t===100?'tb ok':t>100?'tb ov':'tb';
+}
+
+/* ── AI modal ── */
+function openAiModal(){
+  const userPrompt=$('ai-prompt-input')?.value.trim()||'';
+  const active=activeEtfs(adminCfg);
+  const etfList=active.map(e=>`${e.id} (${e.name})`).join(', ');
+  const emptyJson=Object.fromEntries(active.map(e=>[e.id,0]));
+
+  const fullPrompt=`You are a portfolio strategy assistant for FINA 402 Investments at USD Knauss School of Business (Week ${activeWeek}).
+
+Active ETFs: ${etfList}
+
+Instructor guidance: ${userPrompt||'Generate a diversified allocation across the active ETFs.'}
+
+Rules:
+- Use ONLY the listed ETFs. Weights are non-negative integers summing to EXACTLY 100.
+- At least 4 ETFs must receive a non-zero weight.
+- Write a 2-3 sentence student-facing rationale explaining the strategy.
+
+Respond ONLY with valid JSON — no markdown, no extra text:
+{"allocations":${JSON.stringify(emptyJson)},"rationale":"..."}`;
+
+  const box=$('ai-prompt-box');
+  if(box)box.value=fullPrompt;
+  const paste=$('ai-json-paste');
+  if(paste)paste.value='';
+  const mm=$('modal-msg');
+  if(mm)mm.innerHTML='';
+  $('ai-modal').hidden=false;
+}
+
+function closeAiModal(){ $('ai-modal').hidden=true; }
+
+async function copyPrompt(){
+  const box=$('ai-prompt-box');
+  if(!box)return;
+  try{
+    await navigator.clipboard.writeText(box.value);
+    const btn=$('copy-btn');
+    if(btn){btn.textContent='Copied!';btn.style.background='#059669';setTimeout(()=>{btn.textContent='Copy';btn.style.background='#1E3A5F';},2000);}
+  }catch(_){box.select();document.execCommand('copy');}
+}
+
+function loadAiJson(){
+  const raw=$('ai-json-paste')?.value.trim()||'';
+  const mm=$('modal-msg');
+  if(!raw){if(mm)mm.innerHTML='<div class="msg er">Paste the JSON from Claude first.</div>';return;}
+  let result;
+  try{ result=JSON.parse(raw); }
+  catch(_){if(mm)mm.innerHTML='<div class="msg er">Invalid JSON. Make sure you copied the full response.</div>';return;}
+  if(!result?.allocations){if(mm)mm.innerHTML='<div class="msg er">Missing "allocations" key in JSON.</div>';return;}
+
+  const active=activeEtfs(adminCfg);
+  let total=0;
+  active.forEach(e=>{const v=Math.round(Number(result.allocations[e.id])||0);adminAlloc[e.id]=v;total+=v;});
+  if(Math.abs(total-100)>2){if(mm)mm.innerHTML=`<div class="msg er">Weights sum to ${total}%, expected 100. Edit and try again.</div>`;return;}
+  if(total!==100){const diff=100-total;const big=active.reduce((a,b)=>adminAlloc[a.id]>=adminAlloc[b.id]?a:b);adminAlloc[big.id]=Math.max(0,adminAlloc[big.id]+diff);}
+
+  if(result.rationale){const ar=$('arat');if(ar)ar.value=result.rationale;}
+  buildSliders('asg',adminAlloc,adminCfg,true);
+  closeAiModal();
+  const aim=$('aim');
+  if(aim)aim.innerHTML='<div class="msg ok">✓ Allocation loaded — review sliders then save.</div>';
+}
+
+async function saveAI(){
+  const active=activeEtfs(adminCfg);
+  const t=active.reduce((s,e)=>s+(adminAlloc[e.id]||0),0);
+  const m=$('aim');
+  if(t!==100){if(m)m.innerHTML=`<div class="msg er">Total is ${t}%. Must be exactly 100%.</div>`;return;}
+  const rat=$('arat')?.value.trim()||'';
+  const data=Object.fromEntries(active.map(e=>[e.id,adminAlloc[e.id]||0]));
+  data.rationale=rat;
+  try{
+    await fs.doc(`config/ai_week_${activeWeek}`).set(data);
+    aiAlloc={...Object.fromEntries(active.map(e=>[e.id,adminAlloc[e.id]||0]))};
+    aiRationale=rat;
+    if(m)m.innerHTML=`<div class="msg ok">✓ AI allocation saved for Week ${activeWeek}.</div>`;
+  }catch(err){if(m)m.innerHTML=`<div class="msg er">Error: ${err.message}</div>`;}
+}
+
+async function advWeek(){
+  const next=activeWeek+1;
+  if(!confirm(`Open Week ${next}? Students can no longer edit Week ${activeWeek} submissions.`))return;
+  try{
+    await fs.doc('config/settings').update({activeWeek:next});
+    activeWeek=next;aiAlloc=null;aiRationale='';
+    adminAlloc=Object.fromEntries(ETFS.map(e=>[e.id,0]));
+    adminCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100};
+    weekCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100};
+    updateChip();renderAdmin();
+    const m=$('advm');if(m)m.innerHTML=`<div class="msg ok">✓ Week ${next} open. Assets reset to sectors — configure as needed.</div>`;
+  }catch(err){alert('Error: '+err.message);}
+}
+
+function showCpw(){const w=$('cpw-wrap');if(w)w.hidden=!w.hidden;}
+async function doChPw(){
+  const pw=$('npw')?.value.trim(),pw2=$('npw2')?.value.trim(),m=$('cpm');
+  if(!pw){if(m)m.innerHTML='<div class="msg er">Enter a password.</div>';return;}
+  if(pw!==pw2){if(m)m.innerHTML='<div class="msg er">Passwords do not match.</div>';return;}
+  try{
+    await fs.doc('config/settings').update({adminPassword:pw});
+    adminPw=pw;if(m)m.innerHTML='<div class="msg ok">✓ Password updated.</div>';
+  }catch(err){if(m)m.innerHTML=`<div class="msg er">Error: ${err.message}</div>`;}
+}
+
+window.addEventListener('load',init);
+</script>
+</body>
+</html>
