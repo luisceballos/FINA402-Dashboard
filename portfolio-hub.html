@@ -863,18 +863,18 @@ async function exportCsv(){
     }));
     const cols=[...etfSet].sort();
 
-    let csv=','+cols.join(',')+'
-';
+    let csv=','+cols.join(',')+`
+`;
     aiRows.forEach(r=>{
       const vals=cols.map(t=>r.allocations?.[t]||0);
-      csv+=`AI-W${r.week},`+vals.join(',')+'
-';
+      csv+=`AI-W${r.week},`+vals.join(',')+`
+`;
     });
     allSubs.forEach(s=>{
       const row=`S${s.section}-T${String(s.team).padStart(2,'0')}-W${s.week}`;
       const vals=cols.map(t=>s.allocations?.[t]||0);
-      csv+=row+','+vals.join(',')+'
-';
+      csv+=row+','+vals.join(',')+`
+`;
     });
 
     const blob=new Blob([csv],{type:'text/csv'});
