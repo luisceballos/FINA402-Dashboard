@@ -514,9 +514,19 @@ async function onTC(){
         </div>`;
       }
     } else {
+      // No submission yet — reset sliders to 0 and re-enable inputs
+      activeEtfs(weekCfg).forEach(e=>{
+        userAlloc[e.id]=0;
+        const r=document.querySelector(`#sg input[type=range][oninput*="'${e.id}'"]`);
+        if(r){r.value=0;r.disabled=false;}
+        const n=$(`uni-${e.id}`); if(n){n.value=0;n.disabled=false;}
+        const p=$(`upc-${e.id}`); if(p)p.textContent='0%';
+      });
+      const rat=$('rat'); if(rat){rat.value='';rat.disabled=false;}
+      updTotal(); if(aiAlloc)updCmp();
       if(idm)idm.innerHTML='';
       if(badge)badge.innerHTML='';
-      if(btn)btn.textContent='Submit Allocation';
+      if(btn){btn.disabled=false;btn.textContent='Submit Allocation';}
     }
   }catch(err){
     const idm=$('id-msg');
