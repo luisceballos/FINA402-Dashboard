@@ -235,6 +235,20 @@ const ETFS = [
 
 const DEFAULT_ACTIVE = ["SPY", "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLU", "XLB", "XLI", "XLRE", "XLC"];
 
+/* ── week schedule ──────────────────────────────────────────────
+   Week 1 = Sep 3 (Thu) → 100 % SPY, closed, no submission form.
+   Week 2 = Sep 4 (Fri) – Sep 10 (Thu). Week N = Fri–Thu blocks.
+   activeWeek is auto-computed from today so the hub always shows
+   the right week without any manual "advance week" click.
+──────────────────────────────────────────────────────────────── */
+const _FIRST_OPEN = new Date("2026-09-04");   // Sep 4 2026
+_FIRST_OPEN.setHours(0,0,0,0);
+function computeActiveWeek() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const days = Math.max(0, Math.floor((today - _FIRST_OPEN) / 86400000));
+  return 2 + Math.floor(days / 7);
+}
+
 /* ── state ── */
 let activeWeek=null, adminPw=null;
 let aiAlloc=null, aiRationale='';
@@ -257,7 +271,7 @@ async function init(){
     const snap = await fs.doc('config/settings').get();
     if(!snap.exists){ showNotReady(); return; }
     const cfg = snap.data();
-    activeWeek     = cfg.activeWeek||1;
+    activeWeek     = computeActiveWeek();        // auto-computed from today's date
     adminPw        = cfg.adminPassword||'';
     semesterFolder = cfg.semesterFolder||"FA2026";
 
@@ -638,8 +652,8 @@ async function doSetup(){
   if(!pw){if(m)m.innerHTML='<div class="msg er">Enter a password.</div>';return;}
   if(pw!==pw2){if(m)m.innerHTML='<div class="msg er">Passwords do not match.</div>';return;}
   try{
-    await fs.doc('config/settings').set({activeWeek:1,adminPassword:pw});
-    adminPw=pw;activeWeek=1;adminAuth=true;
+    await fs.doc('config/settings').set({adminPassword:pw});
+    adminPw=pw; activeWeek=computeActiveWeek(); adminAuth=true;
     adminAlloc=Object.fromEntries(ETFS.map(e=>[e.id,0]));
     adminCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100};
     weekCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100};
@@ -1131,13 +1145,14 @@ async function saveAI(){
 
 async function advWeek(){
   const next=activeWeek+1;
-  if(!confirm(`Open Week ${next}? Students can no longer edit Week ${activeWeek} submissions.`))return;
+  if(!confirm(`Pre-configure Week ${next} settings in Firebase?`))return;
   try{
-    await fs.doc('config/settings').update({activeWeek:next});
+    // activeWeek is auto-computed from date — no need to write it to Firebase.
+    // Just initialize next week's config so the admin can configure assets / AI.
     await fs.doc(`config/week_cfg_${next}`).set({
       activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100,weekOpen:true,allowResubmit:false
     });
-    activeWeek=next;aiAlloc=null;aiRationale='';
+    aiAlloc=null;aiRationale='';
     adminAlloc=Object.fromEntries(ETFS.map(e=>[e.id,0]));
     adminCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100,weekOpen:true,allowResubmit:false};
     weekCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100,weekOpen:true,allowResubmit:false};
