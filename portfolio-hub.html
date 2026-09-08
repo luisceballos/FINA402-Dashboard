@@ -628,7 +628,7 @@ async function checkPw(){
   if(($('apw')?.value||'')===adminPw){
     adminAuth=true;
     adminAlloc=aiAlloc?{...aiAlloc}:Object.fromEntries(ETFS.map(e=>[e.id,0]));
-    adminCfg={activeAssets:[...weekCfg.activeAssets],globalMin:weekCfg.globalMin,globalMax:weekCfg.globalMax};
+    adminCfg={activeAssets:[...weekCfg.activeAssets],globalMin:weekCfg.globalMin,globalMax:weekCfg.globalMax,weekOpen:weekCfg.weekOpen,allowResubmit:weekCfg.allowResubmit};
     renderAdmin();
   } else {
     const m=$('pwm'); if(m)m.innerHTML='<div class="msg er">Incorrect password.</div>';
@@ -655,7 +655,7 @@ async function doSetup(){
     await fs.doc('config/settings').set({adminPassword:pw});
     adminPw=pw; activeWeek=computeActiveWeek(); adminAuth=true;
     adminAlloc=Object.fromEntries(ETFS.map(e=>[e.id,0]));
-    adminCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100};
+    adminCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100,weekOpen:true,allowResubmit:false};
     weekCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100};
     updateChip();renderAdmin();
   }catch(err){if(m)m.innerHTML=`<div class="msg er">Error: ${err.message}</div>`;}
