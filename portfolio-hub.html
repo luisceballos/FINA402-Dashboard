@@ -796,15 +796,25 @@ async function loadSubmissions(){
   if(!wrap) return;
   wrap.innerHTML = '<div class="msg in" style="font-size:12px">Loading…</div>';
   try{
-    const sn = await fs.collection('submissions').where('week','==',activeWeek).get();
+    const [sn, aiSnap] = await Promise.all([
+      fs.collection('submissions').where('week','==',activeWeek).get(),
+      fs.doc(`config/ai_week_${activeWeek}`).get()
+    ]);
     _cachedSubs = sn.docs.map(d=>{return {id:d.id, ...d.data()};
     }).sort((a,b)=>a.section-b.section||a.team-b.team);
 
     const etfSet = new Set();
     _cachedSubs.forEach(s=>{ Object.keys(s.allocations||{}).forEach(k=>{ if((s.allocations[k]||0)>0) etfSet.add(k); }); });
+    let aiWeekAlloc = null, aiWeekRat = '';
+    if(aiSnap.exists){
+      const d = aiSnap.data();
+      aiWeekRat = d.rationale||'';
+      aiWeekAlloc = {};
+      ETFS.forEach(e=>{ const v=Number(d[e.id])||0; if(v>0){ aiWeekAlloc[e.id]=v; etfSet.add(e.id); } });
+    }
     _usedEtfs = ETFS.filter(e=>etfSet.has(e.id)).map(e=>e.id);
 
-    if(_cachedSubs.length===0){
+    if(_cachedSubs.length===0 && !aiWeekAlloc){
       wrap.innerHTML='<div class="msg wn" style="font-size:12px">No submissions yet for Week '+activeWeek+'.</div>';
       return;
     }
@@ -819,6 +829,22 @@ async function loadSubmissions(){
         <th></th>
       </tr></thead>
       <tbody>`;
+
+    if(aiWeekAlloc){
+      html += `<tr style="background:#EFF6FF;border-left:3px solid #2563EB">
+        <td colspan="2" style="font-weight:700;color:#1E40AF;font-size:11px;letter-spacing:.04em">🤖 AI BENCHMARK</td>
+        ${_usedEtfs.map(t=>{const v=aiWeekAlloc[t]||0;return `<td style="text-align:right;font-weight:700;color:${v>0?'#1E40AF':'#94A3B8'}">${v>0?v+'%':'—'}</td>`;}).join('')}
+        <td><button onclick="toggleRat('ai-rat-row')" style="background:none;border:1px solid #BFDBFE;border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer;color:#1E40AF">View</button></td>
+        <td style="color:#5A6E8A;font-size:11px">—</td>
+        <td></td>
+      </tr>
+      <tr id="ai-rat-row" hidden>
+        <td colspan="${4+_usedEtfs.length}" style="white-space:normal;background:#EFF6FF;color:#1E40AF;font-size:12px;padding:10px 12px;line-height:1.5;border-left:3px solid #2563EB">
+          <strong style="font-size:10px;text-transform:uppercase;letter-spacing:.05em">🤖 AI Rationale</strong><br>${aiWeekRat||'No rationale set.'}
+        </td>
+      </tr>`;
+    }
+
     _cachedSubs.forEach((s,i)=>{
       const alloc = s.allocations||{};
       const ts = s.submittedAt ? new Date(s.submittedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
@@ -840,7 +866,7 @@ async function loadSubmissions(){
       </tr>`;
     });
     html += '</tbody></table></div>';
-    html += `<p style="font-size:11px;color:#5A6E8A;margin-top:8px">${_cachedSubs.length} submission${_cachedSubs.length!==1?'s':''} · ${_usedEtfs.length} ETF${_usedEtfs.length!==1?'s':''} used this week</p>`;
+    html += `<p style="font-size:11px;color:#5A6E8A;margin-top:8px">${_cachedSubs.length} submission${_cachedSubs.length!==1?'s':''} · ${_usedEtfs.length} ETF${_usedEtfs.length!==1?'s':''} used this week${aiWeekAlloc?' · 🤖 AI benchmark shown':''}</p>`;
     wrap.innerHTML = html;
   }catch(err){
     wrap.innerHTML=`<div class="msg er" style="font-size:12px">Error: ${err.message}</div>`;
