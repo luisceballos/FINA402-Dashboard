@@ -133,9 +133,60 @@ hr.div { border:none; border-top:1px solid var(--border); margin:18px 0; }
       <h1>Portfolio Submission Hub</h1>
     </div>
     <div id="wchip" class="wk-chip off">…</div>
+    <div id="logout-wrap" hidden>
+      <button onclick="doLogout()" style="background:none;border:1.5px solid rgba(255,255,255,.4);border-radius:6px;color:rgba(255,255,255,.85);padding:5px 12px;font-size:11px;cursor:pointer;font-weight:600">⏻ Log out</button>
+    </div>
   </header>
   <div class="body" id="body"></div>
   <div class="ftr"><a onclick="openAdmin()">⚙ Instructor Access</a></div>
+</div>
+
+<!-- Login Modal -->
+<div id="login-modal" class="modal-bg" hidden>
+  <div class="modal" style="max-width:380px">
+    <div style="text-align:center;margin-bottom:18px">
+      <div style="font-size:38px;margin-bottom:6px">🔐</div>
+      <h2 style="font-size:17px;font-weight:700;color:#1E3A5F;margin-bottom:4px">Team Login</h2>
+      <p style="font-size:12px;color:#5A6E8A">Select your team and enter your password</p>
+    </div>
+    <div class="f" style="margin-bottom:12px">
+      <label>Team</label>
+      <select id="lm-team" style="font-size:14px"></select>
+    </div>
+    <div class="f" style="margin-bottom:16px">
+      <label>Password</label>
+      <input type="password" id="lm-pw" placeholder="Enter your password"
+        onkeydown="if(event.key==='Enter')doTeamLogin()"
+        style="font-size:14px">
+    </div>
+    <div id="lm-msg"></div>
+    <button class="btn bp-" id="lm-btn" onclick="doTeamLogin()" style="width:100%;margin-top:12px">Log In</button>
+  </div>
+</div>
+
+<!-- Change Password Modal -->
+<div id="cp-modal" class="modal-bg" hidden>
+  <div class="modal" style="max-width:380px">
+    <div style="text-align:center;margin-bottom:18px">
+      <div style="font-size:36px;margin-bottom:6px">🔑</div>
+      <h2 style="font-size:17px;font-weight:700;color:#1E3A5F;margin-bottom:4px">Set Your Password</h2>
+    </div>
+    <div id="cp-forced-note" class="msg wn" style="margin-bottom:14px;font-size:12px" hidden>
+      First login detected. Please set a personal password before continuing.
+    </div>
+    <div class="f" style="margin-bottom:12px">
+      <label>New Password (min 6 characters)</label>
+      <input type="password" id="cp-pw1" placeholder="New password" style="font-size:14px">
+    </div>
+    <div class="f" style="margin-bottom:16px">
+      <label>Confirm Password</label>
+      <input type="password" id="cp-pw2" placeholder="Confirm password"
+        onkeydown="if(event.key==='Enter')doChangePass()"
+        style="font-size:14px">
+    </div>
+    <div id="cp-msg"></div>
+    <button class="btn bp-" id="cp-save" onclick="doChangePass()" style="width:100%;margin-top:12px">Save New Password</button>
+  </div>
 </div>
 
 <!-- Success Modal -->
@@ -258,12 +309,102 @@ let userAlloc  = Object.fromEntries(ETFS.map(e=>[e.id,0]));
 let adminAlloc = Object.fromEntries(ETFS.map(e=>[e.id,0]));
 let adminCfg   = {activeAssets:[...DEFAULT_ACTIVE], globalMin:0, globalMax:100, weekOpen:true, allowResubmit:false};
 let adminAuth  = false;
+// ── Team login session ──
+let teamSession = null; // {team, section, teamNum, passHash}
+let sectionsConfig = {}; // {1:5, 2:6, ...} from Firebase
+let teamPasswords  = {}; // {"S1-T1": {hash, mustChange}} from Firebase
 
 const $  = id => document.getElementById(id);
 const clamp = (v,lo,hi) => Math.max(lo, Math.min(hi, v));
 const sumActive = (alloc,cfg) => activeEtfs(cfg).reduce((s,e)=>s+(Number(alloc[e.id])||0),0);
 function activeEtfs(cfg){ return ETFS.filter(e=>(cfg.activeAssets||DEFAULT_ACTIVE).includes(e.id)); }
 function catList(){ return [...new Set(ETFS.map(e=>e.cat))]; }
+
+/* ══════════ CRYPTO / LOGIN ══════════ */
+async function sha256(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function buildTeamList(){
+  // Returns [{label:'S1-T1', sec:1, team:1}, ...] from sectionsConfig
+  const list=[];
+  [1,2,3,4].forEach(s=>{
+    const n=sectionsConfig[s]||0;
+    for(let t=1;t<=n;t++) list.push({label:`S${s}-T${t}`,sec:s,team:t});
+  });
+  return list;
+}
+
+function showLoginModal(msg=''){
+  const teams=buildTeamList();
+  const opts=teams.map(t=>`<option value="${t.label}">${t.label}</option>`).join('');
+  $('login-modal').hidden=false;
+  $('lm-team').innerHTML=`<option value="">— Select your team —</option>${opts}`;
+  if(msg) $('lm-msg').innerHTML=`<div class="msg er" style="margin-top:10px">${msg}</div>`;
+  else $('lm-msg').innerHTML='';
+  $('lm-pw').value='';
+}
+
+async function doTeamLogin(){
+  const teamKey=$('lm-team').value;
+  const pw=$('lm-pw').value.trim();
+  if(!teamKey){$('lm-msg').innerHTML='<div class="msg er">Select your team.</div>';return;}
+  if(!pw){$('lm-msg').innerHTML='<div class="msg er">Enter your password.</div>';return;}
+  const btn=$('lm-btn'); btn.disabled=true; btn.textContent='Verifying…';
+  try{
+    const h=await sha256(pw);
+    const rec=teamPasswords[teamKey];
+    if(!rec){$('lm-msg').innerHTML='<div class="msg er">Team not found. Contact your instructor.</div>';btn.disabled=false;btn.textContent='Log In';return;}
+    if(rec.hash!==h){$('lm-msg').innerHTML='<div class="msg er">Incorrect password.</div>';btn.disabled=false;btn.textContent='Log In';return;}
+    // Success — check mustChange
+    const m=teamKey.match(/^S(\d+)-T(\d+)$/);
+    const sess={team:teamKey,section:Number(m[1]),teamNum:Number(m[2]),passHash:h};
+    if(rec.mustChange){
+      teamSession=sess;
+      showChangePassModal(true);
+    }else{
+      teamSession=sess;
+      localStorage.setItem('fina402_session', JSON.stringify(sess));
+      $('login-modal').hidden=true;
+      renderForm();
+    }
+  }catch(e){$('lm-msg').innerHTML=`<div class="msg er">Error: ${e.message}</div>`;}
+  btn.disabled=false; btn.textContent='Log In';
+}
+
+function showChangePassModal(forced=false){
+  $('cp-forced-note').hidden=!forced;
+  $('cp-modal').hidden=false;
+  $('cp-pw1').value=''; $('cp-pw2').value=''; $('cp-msg').innerHTML='';
+}
+
+async function doChangePass(){
+  const pw1=$('cp-pw1').value, pw2=$('cp-pw2').value;
+  if(pw1.length<6){$('cp-msg').innerHTML='<div class="msg er">Min 6 characters.</div>';return;}
+  if(pw1!==pw2){$('cp-msg').innerHTML='<div class="msg er">Passwords do not match.</div>';return;}
+  const btn=$('cp-save'); btn.disabled=true; btn.textContent='Saving…';
+  try{
+    const h=await sha256(pw1);
+    await fs.doc('config/team_passwords').set(
+      {[teamSession.team]:{hash:h, mustChange:false}}, {merge:true}
+    );
+    teamPasswords[teamSession.team]={hash:h,mustChange:false};
+    teamSession.passHash=h;
+    localStorage.setItem('fina402_session', JSON.stringify(teamSession));
+    $('cp-modal').hidden=true;
+    $('login-modal').hidden=true;
+    $('cp-msg').innerHTML='';
+    renderForm();
+  }catch(e){$('cp-msg').innerHTML=`<div class="msg er">Error: ${e.message}</div>`;}
+  btn.disabled=false; btn.textContent='Save New Password';
+}
+
+function doLogout(){
+  localStorage.removeItem('fina402_session');
+  teamSession=null;
+  showLoginModal();
+}
 
 /* ══════════ INIT ══════════ */
 async function init(){
@@ -299,8 +440,32 @@ async function init(){
       }
     }catch(_){}
 
+    // Load sections config and team passwords
+    try{
+      const [sc, tp] = await Promise.all([
+        fs.doc('config/sections').get(),
+        fs.doc('config/team_passwords').get()
+      ]);
+      if(sc.exists) sectionsConfig=sc.data();
+      if(tp.exists) teamPasswords=tp.data();
+    }catch(_){}
+
     $('lov').hidden=true; $('app').hidden=false;
-    updateChip(); renderForm();
+    updateChip();
+
+    // Check for saved session
+    try{
+      const saved=localStorage.getItem('fina402_session');
+      if(saved){
+        const s=JSON.parse(saved);
+        const rec=teamPasswords[s.team];
+        if(rec && rec.hash===s.passHash && !rec.mustChange){
+          teamSession=s;
+          renderForm(); return;
+        }
+      }
+    }catch(_){}
+    showLoginModal();
   }catch(err){
     $('lov').innerHTML=`<p style="color:#DC2626;padding:24px;text-align:center">Error: ${err.message}</p>`;
   }
@@ -325,6 +490,9 @@ function showNotReady(){
 
 /* ══════════ STUDENT FORM ══════════ */
 function renderForm(){
+  if(teamSession){
+    $('logout-wrap').hidden=false;
+  }
   if(!weekCfg.weekOpen){
     $('body').innerHTML=`<div class="card" style="text-align:center;padding:40px">
       <div style="font-size:36px;margin-bottom:12px">🔒</div>
@@ -347,7 +515,7 @@ function renderForm(){
     <div class="ct">Team Identification</div>
     <div class="r2">
       <div class="f"><label>Section</label>
-        <select id="ss" onchange="onTC()">
+        <select id="ss" onchange="onTC()" ${teamSession?'disabled':''}>
           <option value="">— Select your section —</option>
           <option value="1">Section 1</option>
           <option value="2">Section 2</option>
@@ -355,7 +523,7 @@ function renderForm(){
           <option value="4">Section 4</option>
         </select></div>
       <div class="f"><label>Team</label>
-        <select id="st" onchange="onTC()">
+        <select id="st" onchange="onTC()" ${teamSession?'disabled':''}>
           <option value="">— Select your team —</option>
           <option value="1">Team 1</option>
           <option value="2">Team 2</option>
@@ -407,6 +575,12 @@ function renderForm(){
 
   buildSliders('sg',userAlloc,weekCfg,false);
   if(aiAlloc) buildCmpBars();
+  if(teamSession){
+    const ss=$('ss'), st=$('st');
+    if(ss){ ss.value=teamSession.section; }
+    if(st){ st.value=teamSession.teamNum; }
+    onTC();
+  }
 }
 
 /* ── sliders ── */
@@ -661,6 +835,128 @@ async function doSetup(){
   }catch(err){if(m)m.innerHTML=`<div class="msg er">Error: ${err.message}</div>`;}
 }
 
+/* ── section & password admin helpers ── */
+async function saveSections(){
+  const msg=$('sec-setup-msg');
+  msg.innerHTML='<div class="msg in">Saving…</div>';
+  try{
+    const newCfg={};
+    [1,2,3,4].forEach(s=>{ newCfg[s]=Number($(`sec-n-${s}`).value)||5; });
+    // Save sections config
+    await fs.doc('config/sections').set(newCfg);
+    sectionsConfig=newCfg;
+    // Initialize missing teams with default pass hash
+    const defaultHash = await sha256('fina402');
+    const batch={}; // we'll write one merged doc
+    const updates={};
+    for(const [s,n] of Object.entries(newCfg)){
+      for(let t=1;t<=n;t++){
+        const key=`S${s}-T${t}`;
+        if(!teamPasswords[key]){ updates[key]={hash:defaultHash,mustChange:true}; }
+      }
+    }
+    if(Object.keys(updates).length>0){
+      await fs.doc('config/team_passwords').set(updates,{merge:true});
+      Object.assign(teamPasswords,updates);
+    }
+    msg.innerHTML=`<div class="msg ok">✓ Saved. ${Object.keys(updates).length} new teams initialized with default password.</div>`;
+    loadSectionStatus();
+  }catch(e){msg.innerHTML=`<div class="msg er">Error: ${e.message}</div>`;}
+}
+
+async function loadSectionStatus(){
+  const wrap=$('sec-status-wrap'); if(!wrap)return;
+  wrap.innerHTML='<div class="msg in" style="font-size:12px">Loading…</div>';
+  try{
+    const snap=await fs.doc('config/team_passwords').get();
+    const pw=snap.exists?snap.data():{};
+    teamPasswords=pw;
+    let rows='';
+    [1,2,3,4].forEach(s=>{
+      const n=sectionsConfig[s]||0;
+      if(!n)return;
+      for(let t=1;t<=n;t++){
+        const key=`S${s}-T${t}`;
+        const rec=pw[key];
+        const icon=!rec?'❓':rec.mustChange?'⚠️':'🔒';
+        const label=!rec?'<span style="color:#DC2626">Not initialized</span>':rec.mustChange?'<span style="color:#D97706">Default password</span>':'<span style="color:#059669">Password set</span>';
+        rows+=`<tr><td style="padding:4px 8px;font-weight:700">${icon} ${key}</td><td style="padding:4px 8px;font-size:12px">${label}</td></tr>`;
+      }
+    });
+    wrap.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px"><tbody>${rows}</tbody></table>`;
+  }catch(e){wrap.innerHTML=`<div class="msg er">${e.message}</div>`;}
+}
+
+function pmRefreshTeams(){
+  const s=Number($('pm-sec').value);
+  const sel=$('pm-team');
+  sel.innerHTML='<option value="">— Select team —</option>';
+  if(!s)return;
+  const n=sectionsConfig[s]||0;
+  for(let t=1;t<=n;t++){
+    const key=`S${s}-T${t}`;
+    const rec=teamPasswords[key];
+    const icon=!rec?'❓':rec.mustChange?'⚠️':'🔒';
+    sel.innerHTML+=`<option value="${t}">${icon} Team ${t}</option>`;
+  }
+}
+
+async function resetTeamPass(){
+  const s=$('pm-sec').value, t=$('pm-team').value;
+  const msg=$('pm-msg');
+  if(!s||!t){msg.innerHTML='<div class="msg er">Select section and team.</div>';return;}
+  const key=`S${s}-T${t}`;
+  const defaultHash=await sha256('fina402');
+  try{
+    await fs.doc('config/team_passwords').set({[key]:{hash:defaultHash,mustChange:true}},{merge:true});
+    teamPasswords[key]={hash:defaultHash,mustChange:true};
+    msg.innerHTML=`<div class="msg ok">✓ ${key} reset to default password. They must change it on next login.</div>`;
+    pmRefreshTeams();
+  }catch(e){msg.innerHTML=`<div class="msg er">${e.message}</div>`;}
+}
+
+async function addTeamToSection(){
+  const s=Number($('pm-sec').value);
+  const msg=$('pm-msg');
+  if(!s){msg.innerHTML='<div class="msg er">Select a section first.</div>';return;}
+  const current=sectionsConfig[s]||0;
+  const newN=current+1;
+  const key=`S${s}-T${newN}`;
+  const defaultHash=await sha256('fina402');
+  try{
+    await fs.doc('config/sections').set({[s]:newN},{merge:true});
+    sectionsConfig[s]=newN;
+    $(`sec-n-${s}`).value=newN;
+    await fs.doc('config/team_passwords').set({[key]:{hash:defaultHash,mustChange:true}},{merge:true});
+    teamPasswords[key]={hash:defaultHash,mustChange:true};
+    msg.innerHTML=`<div class="msg ok">✓ ${key} added with default password.</div>`;
+    pmRefreshTeams();
+  }catch(e){msg.innerHTML=`<div class="msg er">${e.message}</div>`;}
+}
+
+async function removeTeamFromSection(){
+  const s=Number($('pm-sec').value), t=Number($('pm-team').value);
+  const msg=$('pm-msg');
+  if(!s||!t){msg.innerHTML='<div class="msg er">Select section and team.</div>';return;}
+  const key=`S${s}-T${t}`;
+  if(!confirm(`Remove ${key} from section config? Their submissions are preserved in Firebase.`))return;
+  try{
+    // Remove password entry
+    await fs.doc('config/team_passwords').update({[key]:firebase.firestore.FieldValue.delete()});
+    delete teamPasswords[key];
+    // Decrease section count if this is the last team
+    const current=sectionsConfig[s]||0;
+    if(t===current){
+      const newN=current-1;
+      await fs.doc('config/sections').set({[s]:newN},{merge:true});
+      sectionsConfig[s]=newN;
+      $(`sec-n-${s}`).value=newN;
+    }
+    msg.innerHTML=`<div class="msg ok">✓ ${key} removed. Submissions untouched.</div>`;
+    pmRefreshTeams();
+  }catch(e){msg.innerHTML=`<div class="msg er">${e.message}</div>`;}
+}
+
 /* ── admin main ── */
 async function renderAdmin(){
   const counts={1:0,2:0,3:0,4:0}; let tot=0;
@@ -762,6 +1058,54 @@ async function renderAdmin(){
   </div>
 
   <div class="card">
+    <div class="ct">👥 Section Setup</div>
+    <p style="font-size:12px;color:#5A6E8A;margin-bottom:14px">
+      Set how many teams each section has. Click <strong>Save &amp; Initialize</strong> to create missing teams with the default password
+      <code style="background:#F5F7FB;padding:1px 5px;border-radius:4px">fina402</code>. Existing teams with custom passwords are never overwritten.
+    </p>
+    <div class="r2" style="gap:10px;margin-bottom:14px" id="sec-setup-grid">
+      ${[1,2,3,4].map(s=>`
+        <div class="f"><label>Section ${s} — # of Teams</label>
+          <input type="number" id="sec-n-${s}" min="1" max="20" step="1"
+            value="${sectionsConfig[s]||5}" style="width:100%;font-size:14px">
+        </div>`).join('')}
+    </div>
+    <div id="sec-setup-msg" style="margin-bottom:8px"></div>
+    <div style="display:flex;gap:9px;flex-wrap:wrap">
+      <button class="btn bp-" onclick="saveSections()">Save &amp; Initialize Teams</button>
+      <button class="btn bh-" onclick="loadSectionStatus()">↻ Refresh Status</button>
+    </div>
+    <div id="sec-status-wrap" style="margin-top:14px"></div>
+  </div>
+
+  <div class="card">
+    <div class="ct">🔑 Team Password Management</div>
+    <p style="font-size:12px;color:#5A6E8A;margin-bottom:14px">
+      Reset a team's password back to <code style="background:#F5F7FB;padding:1px 5px;border-radius:4px">fina402</code>
+      and force them to set a new one on next login. Or add/remove an individual team.
+    </p>
+    <div class="r2" style="gap:10px;margin-bottom:14px">
+      <div class="f"><label>Section</label>
+        <select id="pm-sec" onchange="pmRefreshTeams()" style="font-size:13px">
+          <option value="">— Select —</option>
+          ${[1,2,3,4].map(s=>`<option value="${s}">Section ${s}</option>`).join('')}
+        </select>
+      </div>
+      <div class="f"><label>Team</label>
+        <select id="pm-team" style="font-size:13px">
+          <option value="">— Select section first —</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn bh-" style="border-color:#DC2626;color:#DC2626" onclick="resetTeamPass()">🔄 Reset to Default Password</button>
+      <button class="btn bg-" onclick="addTeamToSection()">＋ Add Team to Section</button>
+      <button class="btn bh-" style="border-color:#DC2626;color:#DC2626" onclick="removeTeamFromSection()">− Remove Team</button>
+    </div>
+    <div id="pm-msg"></div>
+  </div>
+
+  <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
       <div class="ct" style="margin:0">📋 Week ${activeWeek} — Submissions</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -785,6 +1129,7 @@ async function renderAdmin(){
   buildCfgTable();
   buildSliders('asg',adminAlloc,adminCfg,true);
   loadSubmissions();
+  loadSectionStatus();
 }
 
 /* ── cached submissions ── */
