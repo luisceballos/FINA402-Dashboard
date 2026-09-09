@@ -1410,7 +1410,11 @@ function onChkChange(id){
 async function saveCfg(){
   const m=$('cfg-msg');
   if(adminCfg.activeAssets.length===0){if(m)m.innerHTML='<div class="msg er">Select at least one ETF.</div>';return;}
-  const gMin=adminCfg.globalMin||0, gMax=adminCfg.globalMax||100;
+  // Read constraint inputs directly from DOM to avoid oninput timing issues
+  const rawMin=$('g-min')?.value; const rawMax=$('g-max')?.value;
+  adminCfg.globalMin=(rawMin!==''&&rawMin!=null)?Math.max(0,parseInt(rawMin)||0):0;
+  adminCfg.globalMax=(rawMax!==''&&rawMax!=null)?Math.max(1,parseInt(rawMax)||100):100;
+  const gMin=adminCfg.globalMin, gMax=adminCfg.globalMax;
   if(gMin>=gMax){if(m)m.innerHTML=`<div class="msg er">Min (${gMin}%) must be less than max (${gMax}%).</div>`;return;}
   try{
     await fs.doc(`config/week_cfg_${activeWeek}`).set({
@@ -1418,8 +1422,8 @@ async function saveCfg(){
       weekOpen:adminCfg.weekOpen, allowResubmit:adminCfg.allowResubmit,
     });
     weekCfg={...adminCfg};
-    if(m)m.innerHTML=`<div class="msg ok">✓ Saved — ${adminCfg.activeAssets.length} ETFs, range ${gMin}–${gMax}%.</div>`;
-  }catch(err){if(m)m.innerHTML=`<div class="msg er">Error: ${err.message}</div>`;}
+    if(m)m.innerHTML=`<div class="msg ok">✓ Saved — ${adminCfg.activeAssets.length} ETFs, constraint ${gMin}–${gMax}%.</div>`;
+  }catch(err){if(m)m.innerHTML=`<div class="msg er">Error saving: ${err.message}</div>`;}
 }
 
 async function toggleWeekOpen(open){
