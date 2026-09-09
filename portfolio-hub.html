@@ -361,6 +361,9 @@ async function doTeamLogin(){
     if(teamKey==='__instructor__'){
       if(h!==instructorHash){$('lm-msg').innerHTML='<div class="msg er">Incorrect instructor password.</div>';btn.disabled=false;btn.textContent='Log In';return;}
       adminAuth=true;
+      // Sync adminCfg from weekCfg so instructor sees the saved constraints
+      adminCfg={activeAssets:[...weekCfg.activeAssets],globalMin:weekCfg.globalMin,globalMax:weekCfg.globalMax,weekOpen:weekCfg.weekOpen,allowResubmit:weekCfg.allowResubmit};
+      adminAlloc=aiAlloc?{...aiAlloc}:Object.fromEntries(ETFS.map(e=>[e.id,0]));
       $('login-modal').hidden=true;
       $('logout-wrap').hidden=false;
       renderAdmin();
