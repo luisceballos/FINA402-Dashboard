@@ -292,11 +292,11 @@ const DEFAULT_ACTIVE = ["SPY", "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLU", 
    activeWeek is auto-computed from today so the hub always shows
    the right week without any manual "advance week" click.
 ──────────────────────────────────────────────────────────────── */
-const _FIRST_OPEN = new Date("2026-09-04");   // Sep 4 2026
-_FIRST_OPEN.setHours(0,0,0,0);
+const _FIRST_OPEN = new Date("2026-09-04"+'T00:00:00Z');  // Sep 4 2026 UTC midnight
 function computeActiveWeek() {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const days = Math.max(0, Math.floor((today - _FIRST_OPEN) / 86400000));
+  const now = new Date();
+  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const days = Math.max(0, Math.floor((todayUTC - _FIRST_OPEN.getTime()) / 86400000));
   return 2 + Math.floor(days / 7);
 }
 
