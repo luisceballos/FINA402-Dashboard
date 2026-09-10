@@ -247,23 +247,24 @@ function fmt(d,yr){var o={month:'short',day:'numeric',timeZone:'UTC'};if(yr)o.ye
 var today=new Date();today.setHours(0,0,0,0);
 var diff=Math.floor((today-FF)/86400000);
 var cw=Math.floor(diff/7);
-var nFri=addD(FF,(cw+1)*7),nThu=addD(nFri,-1);
-var dl=Math.floor((nThu-today)/86400000);
 var nWk=cw+1;
-if(dl<=0){nWk++;nFri=addD(FF,nWk*7);nThu=addD(nFri,-1);dl=Math.floor((nThu-today)/86400000);}
+var nFri=addD(FF,nWk*7),nThu=addD(nFri,-1);
+var dl=Math.floor((nThu-today)/86400000);
+if(dl<0){nWk++;nFri=addD(FF,nWk*7);nThu=addD(nFri,-1);dl=Math.floor((nThu-today)/86400000);}
+var dispWk=nWk+1;
 var bTxt,bBg;
-if(dl<=0){
-bTxt='🔴 Deadline <strong>TODAY</strong> (Thursday) — submit <strong>Week '+nWk+'</strong> allocation by market close. New portfolio starts Friday '+fmt(nFri)+'.';
+if(dl===0){
+bTxt='🔴 Deadline <strong>TODAY</strong> (Thursday) — submit <strong>Week '+dispWk+'</strong> allocation by market close. New portfolio starts Friday '+fmt(nFri)+'.';
 bBg='background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.3);color:#DC2626';}
 else if(dl<=2){
-bTxt='🟡 Deadline: <strong>'+fmt(nThu)+' (Thursday)</strong> — '+dl+' day'+(dl!==1?'s':'')+' away — submit <strong>Week '+nWk+'</strong> allocation by market close. New portfolio starts Friday '+fmt(nFri)+'.';
+bTxt='🟡 Deadline: <strong>'+fmt(nThu)+' (Thursday)</strong> — '+dl+' day'+(dl!==1?'s':'')+' away — submit <strong>Week '+dispWk+'</strong> allocation by market close. New portfolio starts Friday '+fmt(nFri)+'.';
 bBg='background:rgba(217,119,6,.1);border:1px solid rgba(217,119,6,.3);color:#92400E';}
 else{
-bTxt='📅 Deadline: <strong>'+fmt(nThu,true)+' (Thursday)</strong> — '+dl+' days away — submit <strong>Week '+nWk+'</strong> allocation by market close. New portfolio starts Friday '+fmt(nFri)+'.';
+bTxt='📅 Deadline: <strong>'+fmt(nThu,true)+' (Thursday)</strong> — '+dl+' days away — submit <strong>Week '+dispWk+'</strong> allocation by market close. New portfolio starts Friday '+fmt(nFri)+'.';
 bBg='background:var(--tag);border:1px solid var(--border);color:var(--muted)';}
-var uStart=(dl<=0)?nWk+1:nWk;
+var uStart=nWk+1;
 var items=[];
-for(var i=0;i<4;i++){var wk=uStart+i,fri=addD(FF,wk*7),thu=addD(fri,-1);items.push('<strong>W'+wk+'</strong> submit by '+fmt(thu)+' → starts '+fmt(fri));}
+for(var i=0;i<4;i++){var wk=uStart+i,fri=addD(FF,wk*7),thu=addD(fri,-1);items.push('<strong>W'+(wk+1)+'</strong> submit by '+fmt(thu)+' → starts '+fmt(fri));}
 var b=document.getElementById('deadline-banner');
 var s=document.getElementById('deadline-schedule');
 if(b){b.style.cssText='font-size:12px;padding:10px 14px;border-radius:7px;margin-bottom:6px;'+bBg;b.innerHTML=bTxt;}
