@@ -250,6 +250,7 @@ var cw=Math.floor(diff/7);
 var nFri=addD(FF,(cw+1)*7),nThu=addD(nFri,-1);
 var dl=Math.floor((nThu-today)/86400000);
 var nWk=cw+1;
+if(dl<=0){nWk++;nFri=addD(FF,nWk*7);nThu=addD(nFri,-1);dl=Math.floor((nThu-today)/86400000);}
 var bTxt,bBg;
 if(dl<=0){
 bTxt='🔴 Deadline <strong>TODAY</strong> (Thursday) — submit <strong>Week '+nWk+'</strong> allocation by market close. New portfolio starts Friday '+fmt(nFri)+'.';
