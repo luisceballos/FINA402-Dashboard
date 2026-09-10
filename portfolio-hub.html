@@ -133,9 +133,60 @@ hr.div { border:none; border-top:1px solid var(--border); margin:18px 0; }
       <h1>Portfolio Submission Hub</h1>
     </div>
     <div id="wchip" class="wk-chip off">…</div>
+    <div id="logout-wrap" hidden>
+      <button onclick="doLogout()" style="background:none;border:1.5px solid rgba(255,255,255,.4);border-radius:6px;color:rgba(255,255,255,.85);padding:5px 12px;font-size:11px;cursor:pointer;font-weight:600">⏻ Log out</button>
+    </div>
   </header>
   <div class="body" id="body"></div>
   <div class="ftr"><a onclick="openAdmin()">⚙ Instructor Access</a></div>
+</div>
+
+<!-- Login Modal -->
+<div id="login-modal" class="modal-bg" hidden>
+  <div class="modal" style="max-width:380px">
+    <div style="text-align:center;margin-bottom:18px">
+      <div style="font-size:38px;margin-bottom:6px">🔐</div>
+      <h2 style="font-size:17px;font-weight:700;color:#1E3A5F;margin-bottom:4px">Team Login</h2>
+      <p style="font-size:12px;color:#5A6E8A">Select your team and enter your password</p>
+    </div>
+    <div class="f" style="margin-bottom:12px">
+      <label>Team</label>
+      <select id="lm-team" style="font-size:14px"></select>
+    </div>
+    <div class="f" style="margin-bottom:16px">
+      <label>Password</label>
+      <input type="password" id="lm-pw" placeholder="Enter your password"
+        onkeydown="if(event.key==='Enter')doTeamLogin()"
+        style="font-size:14px">
+    </div>
+    <div id="lm-msg"></div>
+    <button class="btn bp-" id="lm-btn" onclick="doTeamLogin()" style="width:100%;margin-top:12px">Log In</button>
+  </div>
+</div>
+
+<!-- Change Password Modal -->
+<div id="cp-modal" class="modal-bg" hidden>
+  <div class="modal" style="max-width:380px">
+    <div style="text-align:center;margin-bottom:18px">
+      <div style="font-size:36px;margin-bottom:6px">🔑</div>
+      <h2 style="font-size:17px;font-weight:700;color:#1E3A5F;margin-bottom:4px">Set Your Password</h2>
+    </div>
+    <div id="cp-forced-note" class="msg wn" style="margin-bottom:14px;font-size:12px" hidden>
+      First login detected. Please set a personal password before continuing.
+    </div>
+    <div class="f" style="margin-bottom:12px">
+      <label>New Password (min 6 characters)</label>
+      <input type="password" id="cp-pw1" placeholder="New password" style="font-size:14px">
+    </div>
+    <div class="f" style="margin-bottom:16px">
+      <label>Confirm Password</label>
+      <input type="password" id="cp-pw2" placeholder="Confirm password"
+        onkeydown="if(event.key==='Enter')doChangePass()"
+        style="font-size:14px">
+    </div>
+    <div id="cp-msg"></div>
+    <button class="btn bp-" id="cp-save" onclick="doChangePass()" style="width:100%;margin-top:12px">Save New Password</button>
+  </div>
 </div>
 
 <!-- Success Modal -->
@@ -241,11 +292,11 @@ const DEFAULT_ACTIVE = ["SPY", "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLU", 
    activeWeek is auto-computed from today so the hub always shows
    the right week without any manual "advance week" click.
 ──────────────────────────────────────────────────────────────── */
-const _FIRST_OPEN = new Date("2026-09-04");   // Sep 4 2026
-_FIRST_OPEN.setHours(0,0,0,0);
+const _FIRST_OPEN = new Date("2026-09-04"+'T00:00:00Z');  // Sep 4 2026 UTC midnight
 function computeActiveWeek() {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const days = Math.max(0, Math.floor((today - _FIRST_OPEN) / 86400000));
+  const now = new Date();
+  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const days = Math.max(0, Math.floor((todayUTC - _FIRST_OPEN.getTime()) / 86400000));
   return 2 + Math.floor(days / 7);
 }
 
@@ -258,12 +309,118 @@ let userAlloc  = Object.fromEntries(ETFS.map(e=>[e.id,0]));
 let adminAlloc = Object.fromEntries(ETFS.map(e=>[e.id,0]));
 let adminCfg   = {activeAssets:[...DEFAULT_ACTIVE], globalMin:0, globalMax:100, weekOpen:true, allowResubmit:false};
 let adminAuth  = false;
+// ── Team login session ──
+let instructorHash = ''; // SHA-256 of instructor password, loaded from Firebase
+let teamSession = null; // {team, section, teamNum, passHash}
+let sectionsConfig = {}; // {1:5, 2:6, ...} from Firebase
+let teamPasswords  = {}; // {"S1-T1": {hash, mustChange}} from Firebase
 
 const $  = id => document.getElementById(id);
 const clamp = (v,lo,hi) => Math.max(lo, Math.min(hi, v));
 const sumActive = (alloc,cfg) => activeEtfs(cfg).reduce((s,e)=>s+(Number(alloc[e.id])||0),0);
 function activeEtfs(cfg){ return ETFS.filter(e=>(cfg.activeAssets||DEFAULT_ACTIVE).includes(e.id)); }
 function catList(){ return [...new Set(ETFS.map(e=>e.cat))]; }
+
+/* ══════════ CRYPTO / LOGIN ══════════ */
+async function sha256(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function buildTeamList(){
+  // Returns [{label:'S1-T1', sec:1, team:1}, ...] from sectionsConfig
+  const list=[];
+  [1,2,3,4].forEach(s=>{
+    const n=sectionsConfig[s]||10;
+    for(let t=1;t<=n;t++) list.push({label:`S${s}-T${t}`,sec:s,team:t});
+  });
+  return list;
+}
+
+function showLoginModal(msg=''){
+  const teams=buildTeamList();
+  const opts=teams.map(t=>`<option value="${t.label}">${t.label}</option>`).join('');
+  $('login-modal').hidden=false;
+  $('lm-team').innerHTML=`<option value="">— Select your team —</option>
+    <option value="__instructor__">🎓 Instructor</option>
+    <optgroup label="Students">${opts}</optgroup>`;
+  if(msg) $('lm-msg').innerHTML=`<div class="msg er" style="margin-top:10px">${msg}</div>`;
+  else $('lm-msg').innerHTML='';
+  $('lm-pw').value='';
+}
+
+async function doTeamLogin(){
+  const teamKey=$('lm-team').value;
+  const pw=$('lm-pw').value.trim();
+  if(!teamKey){$('lm-msg').innerHTML='<div class="msg er">Select your team.</div>';return;}
+  if(!pw){$('lm-msg').innerHTML='<div class="msg er">Enter your password.</div>';return;}
+  const btn=$('lm-btn'); btn.disabled=true; btn.textContent='Verifying…';
+  try{
+    const h=await sha256(pw);
+    // ── Instructor login ──
+    if(teamKey==='__instructor__'){
+      if(h!==instructorHash){$('lm-msg').innerHTML='<div class="msg er">Incorrect instructor password.</div>';btn.disabled=false;btn.textContent='Log In';return;}
+      adminAuth=true;
+      // Sync adminCfg from weekCfg so instructor sees the saved constraints
+      adminCfg={activeAssets:[...weekCfg.activeAssets],globalMin:weekCfg.globalMin,globalMax:weekCfg.globalMax,weekOpen:weekCfg.weekOpen,allowResubmit:weekCfg.allowResubmit};
+      adminAlloc=aiAlloc?{...aiAlloc}:Object.fromEntries(ETFS.map(e=>[e.id,0]));
+      $('login-modal').hidden=true;
+      $('logout-wrap').hidden=false;
+      renderAdmin();
+      btn.disabled=false; btn.textContent='Log In'; return;
+    }
+    // ── Student login ──
+    const rec=teamPasswords[teamKey];
+    if(!rec){$('lm-msg').innerHTML='<div class="msg er">Team not found. Contact your instructor.</div>';btn.disabled=false;btn.textContent='Log In';return;}
+    if(rec.hash!==h){$('lm-msg').innerHTML='<div class="msg er">Incorrect password.</div>';btn.disabled=false;btn.textContent='Log In';return;}
+    // Success — check mustChange
+    const m=teamKey.match(/^S(\d+)-T(\d+)$/);
+    const sess={team:teamKey,section:Number(m[1]),teamNum:Number(m[2]),passHash:h};
+    if(rec.mustChange){
+      teamSession=sess;
+      showChangePassModal(true);
+    }else{
+      teamSession=sess;
+      localStorage.setItem('fina402_session', JSON.stringify(sess));
+      $('login-modal').hidden=true;
+      renderForm();
+    }
+  }catch(e){$('lm-msg').innerHTML=`<div class="msg er">Error: ${e.message}</div>`;}
+  btn.disabled=false; btn.textContent='Log In';
+}
+
+function showChangePassModal(forced=false){
+  $('cp-forced-note').hidden=!forced;
+  $('cp-modal').hidden=false;
+  $('cp-pw1').value=''; $('cp-pw2').value=''; $('cp-msg').innerHTML='';
+}
+
+async function doChangePass(){
+  const pw1=$('cp-pw1').value, pw2=$('cp-pw2').value;
+  if(pw1.length<6){$('cp-msg').innerHTML='<div class="msg er">Min 6 characters.</div>';return;}
+  if(pw1!==pw2){$('cp-msg').innerHTML='<div class="msg er">Passwords do not match.</div>';return;}
+  const btn=$('cp-save'); btn.disabled=true; btn.textContent='Saving…';
+  try{
+    const h=await sha256(pw1);
+    await fs.doc('config/team_passwords').set(
+      {[teamSession.team]:{hash:h, mustChange:false}}, {merge:true}
+    );
+    teamPasswords[teamSession.team]={hash:h,mustChange:false};
+    teamSession.passHash=h;
+    localStorage.setItem('fina402_session', JSON.stringify(teamSession));
+    $('cp-modal').hidden=true;
+    $('login-modal').hidden=true;
+    $('cp-msg').innerHTML='';
+    renderForm();
+  }catch(e){$('cp-msg').innerHTML=`<div class="msg er">Error: ${e.message}</div>`;}
+  btn.disabled=false; btn.textContent='Save New Password';
+}
+
+function doLogout(){
+  localStorage.removeItem('fina402_session');
+  teamSession=null;
+  showLoginModal();
+}
 
 /* ══════════ INIT ══════════ */
 async function init(){
@@ -299,8 +456,44 @@ async function init(){
       }
     }catch(_){}
 
+    // Load sections config, team passwords, and instructor hash
+    try{
+      const [sc, tp] = await Promise.all([
+        fs.doc('config/sections').get(),
+        fs.doc('config/team_passwords').get()
+      ]);
+      if(sc.exists) sectionsConfig=sc.data();
+      if(tp.exists) teamPasswords=tp.data();
+    }catch(_){}
+    // Init instructor hash (default: mikepatton)
+    try{
+      const cfg2=await fs.doc('config/settings').get();
+      const d2=cfg2.data()||{};
+      if(d2.instructorHash){
+        instructorHash=d2.instructorHash;
+      }else{
+        // First time: set hash of default instructor password
+        instructorHash=await sha256('mikepatton');
+        await fs.doc('config/settings').set({instructorHash},{merge:true});
+      }
+    }catch(_){}
+
     $('lov').hidden=true; $('app').hidden=false;
-    updateChip(); renderForm();
+    updateChip();
+
+    // Check for saved session
+    try{
+      const saved=localStorage.getItem('fina402_session');
+      if(saved){
+        const s=JSON.parse(saved);
+        const rec=teamPasswords[s.team];
+        if(rec && rec.hash===s.passHash && !rec.mustChange){
+          teamSession=s;
+          renderForm(); return;
+        }
+      }
+    }catch(_){}
+    showLoginModal();
   }catch(err){
     $('lov').innerHTML=`<p style="color:#DC2626;padding:24px;text-align:center">Error: ${err.message}</p>`;
   }
@@ -325,6 +518,9 @@ function showNotReady(){
 
 /* ══════════ STUDENT FORM ══════════ */
 function renderForm(){
+  if(teamSession){
+    $('logout-wrap').hidden=false;
+  }
   if(!weekCfg.weekOpen){
     $('body').innerHTML=`<div class="card" style="text-align:center;padding:40px">
       <div style="font-size:36px;margin-bottom:12px">🔒</div>
@@ -347,7 +543,7 @@ function renderForm(){
     <div class="ct">Team Identification</div>
     <div class="r2">
       <div class="f"><label>Section</label>
-        <select id="ss" onchange="onTC()">
+        <select id="ss" onchange="onTC()" ${teamSession?'disabled':''}>
           <option value="">— Select your section —</option>
           <option value="1">Section 1</option>
           <option value="2">Section 2</option>
@@ -355,7 +551,7 @@ function renderForm(){
           <option value="4">Section 4</option>
         </select></div>
       <div class="f"><label>Team</label>
-        <select id="st" onchange="onTC()">
+        <select id="st" onchange="onTC()" ${teamSession?'disabled':''}>
           <option value="">— Select your team —</option>
           <option value="1">Team 1</option>
           <option value="2">Team 2</option>
@@ -407,6 +603,12 @@ function renderForm(){
 
   buildSliders('sg',userAlloc,weekCfg,false);
   if(aiAlloc) buildCmpBars();
+  if(teamSession){
+    const ss=$('ss'), st=$('st');
+    if(ss){ ss.value=teamSession.section; }
+    if(st){ st.value=teamSession.teamNum; }
+    onTC();
+  }
 }
 
 /* ── sliders ── */
@@ -628,7 +830,7 @@ async function checkPw(){
   if(($('apw')?.value||'')===adminPw){
     adminAuth=true;
     adminAlloc=aiAlloc?{...aiAlloc}:Object.fromEntries(ETFS.map(e=>[e.id,0]));
-    adminCfg={activeAssets:[...weekCfg.activeAssets],globalMin:weekCfg.globalMin,globalMax:weekCfg.globalMax};
+    adminCfg={activeAssets:[...weekCfg.activeAssets],globalMin:weekCfg.globalMin,globalMax:weekCfg.globalMax,weekOpen:weekCfg.weekOpen,allowResubmit:weekCfg.allowResubmit};
     renderAdmin();
   } else {
     const m=$('pwm'); if(m)m.innerHTML='<div class="msg er">Incorrect password.</div>';
@@ -655,10 +857,132 @@ async function doSetup(){
     await fs.doc('config/settings').set({adminPassword:pw});
     adminPw=pw; activeWeek=computeActiveWeek(); adminAuth=true;
     adminAlloc=Object.fromEntries(ETFS.map(e=>[e.id,0]));
-    adminCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100};
+    adminCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100,weekOpen:true,allowResubmit:false};
     weekCfg={activeAssets:[...DEFAULT_ACTIVE],globalMin:0,globalMax:100};
     updateChip();renderAdmin();
   }catch(err){if(m)m.innerHTML=`<div class="msg er">Error: ${err.message}</div>`;}
+}
+
+/* ── section & password admin helpers ── */
+async function saveSections(){
+  const msg=$('sec-setup-msg');
+  msg.innerHTML='<div class="msg in">Saving…</div>';
+  try{
+    const newCfg={};
+    [1,2,3,4].forEach(s=>{ newCfg[s]=Number($(`sec-n-${s}`).value)||10; });
+    // Save sections config
+    await fs.doc('config/sections').set(newCfg);
+    sectionsConfig=newCfg;
+    // Initialize missing teams with default pass hash
+    const defaultHash = await sha256('fina402');
+    const batch={}; // we'll write one merged doc
+    const updates={};
+    for(const [s,n] of Object.entries(newCfg)){
+      for(let t=1;t<=n;t++){
+        const key=`S${s}-T${t}`;
+        if(!teamPasswords[key]){ updates[key]={hash:defaultHash,mustChange:true}; }
+      }
+    }
+    if(Object.keys(updates).length>0){
+      await fs.doc('config/team_passwords').set(updates,{merge:true});
+      Object.assign(teamPasswords,updates);
+    }
+    msg.innerHTML=`<div class="msg ok">✓ Saved. ${Object.keys(updates).length} new teams initialized with default password.</div>`;
+    loadSectionStatus();
+  }catch(e){msg.innerHTML=`<div class="msg er">Error: ${e.message}</div>`;}
+}
+
+async function loadSectionStatus(){
+  const wrap=$('sec-status-wrap'); if(!wrap)return;
+  wrap.innerHTML='<div class="msg in" style="font-size:12px">Loading…</div>';
+  try{
+    const snap=await fs.doc('config/team_passwords').get();
+    const pw=snap.exists?snap.data():{};
+    teamPasswords=pw;
+    let rows='';
+    [1,2,3,4].forEach(s=>{
+      const n=sectionsConfig[s]||0;
+      if(!n)return;
+      for(let t=1;t<=n;t++){
+        const key=`S${s}-T${t}`;
+        const rec=pw[key];
+        const icon=!rec?'❓':rec.mustChange?'⚠️':'🔒';
+        const label=!rec?'<span style="color:#DC2626">Not initialized</span>':rec.mustChange?'<span style="color:#D97706">Default password</span>':'<span style="color:#059669">Password set</span>';
+        rows+=`<tr><td style="padding:4px 8px;font-weight:700">${icon} ${key}</td><td style="padding:4px 8px;font-size:12px">${label}</td></tr>`;
+      }
+    });
+    wrap.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px"><tbody>${rows}</tbody></table>`;
+  }catch(e){wrap.innerHTML=`<div class="msg er">${e.message}</div>`;}
+}
+
+function pmRefreshTeams(){
+  const s=Number($('pm-sec').value);
+  const sel=$('pm-team');
+  sel.innerHTML='<option value="">— Select team —</option>';
+  if(!s)return;
+  const n=sectionsConfig[s]||0;
+  for(let t=1;t<=n;t++){
+    const key=`S${s}-T${t}`;
+    const rec=teamPasswords[key];
+    const icon=!rec?'❓':rec.mustChange?'⚠️':'🔒';
+    sel.innerHTML+=`<option value="${t}">${icon} Team ${t}</option>`;
+  }
+}
+
+async function resetTeamPass(){
+  const s=$('pm-sec').value, t=$('pm-team').value;
+  const msg=$('pm-msg');
+  if(!s||!t){msg.innerHTML='<div class="msg er">Select section and team.</div>';return;}
+  const key=`S${s}-T${t}`;
+  const defaultHash=await sha256('fina402');
+  try{
+    await fs.doc('config/team_passwords').set({[key]:{hash:defaultHash,mustChange:true}},{merge:true});
+    teamPasswords[key]={hash:defaultHash,mustChange:true};
+    msg.innerHTML=`<div class="msg ok">✓ ${key} reset to default password. They must change it on next login.</div>`;
+    pmRefreshTeams();
+  }catch(e){msg.innerHTML=`<div class="msg er">${e.message}</div>`;}
+}
+
+async function addTeamToSection(){
+  const s=Number($('pm-sec').value);
+  const msg=$('pm-msg');
+  if(!s){msg.innerHTML='<div class="msg er">Select a section first.</div>';return;}
+  const current=sectionsConfig[s]||0;
+  const newN=current+1;
+  const key=`S${s}-T${newN}`;
+  const defaultHash=await sha256('fina402');
+  try{
+    await fs.doc('config/sections').set({[s]:newN},{merge:true});
+    sectionsConfig[s]=newN;
+    $(`sec-n-${s}`).value=newN;
+    await fs.doc('config/team_passwords').set({[key]:{hash:defaultHash,mustChange:true}},{merge:true});
+    teamPasswords[key]={hash:defaultHash,mustChange:true};
+    msg.innerHTML=`<div class="msg ok">✓ ${key} added with default password.</div>`;
+    pmRefreshTeams();
+  }catch(e){msg.innerHTML=`<div class="msg er">${e.message}</div>`;}
+}
+
+async function removeTeamFromSection(){
+  const s=Number($('pm-sec').value), t=Number($('pm-team').value);
+  const msg=$('pm-msg');
+  if(!s||!t){msg.innerHTML='<div class="msg er">Select section and team.</div>';return;}
+  const key=`S${s}-T${t}`;
+  if(!confirm(`Remove ${key} from section config? Their submissions are preserved in Firebase.`))return;
+  try{
+    // Remove password entry
+    await fs.doc('config/team_passwords').update({[key]:firebase.firestore.FieldValue.delete()});
+    delete teamPasswords[key];
+    // Decrease section count if this is the last team
+    const current=sectionsConfig[s]||0;
+    if(t===current){
+      const newN=current-1;
+      await fs.doc('config/sections').set({[s]:newN},{merge:true});
+      sectionsConfig[s]=newN;
+      $(`sec-n-${s}`).value=newN;
+    }
+    msg.innerHTML=`<div class="msg ok">✓ ${key} removed. Submissions untouched.</div>`;
+    pmRefreshTeams();
+  }catch(e){msg.innerHTML=`<div class="msg er">${e.message}</div>`;}
 }
 
 /* ── admin main ── */
@@ -675,7 +999,8 @@ async function renderAdmin(){
       <div class="ct" style="margin:0">Admin Panel</div>
       <div style="display:flex;gap:8px">
         <button class="btn bh-" style="padding:5px 12px;font-size:12px" onclick="renderForm()">← Student View</button>
-        <button class="btn bh-" style="padding:5px 12px;font-size:12px" onclick="showCpw()">Change Password</button>
+        <button class="btn bh-" style="padding:5px 12px;font-size:12px" onclick="showCpw()">Change Admin Pass</button>
+        <button class="btn bh-" style="padding:5px 12px;font-size:12px;border-color:#1E3A5F;color:#1E3A5F" onclick="showChInstrPass()">🎓 Change My Password</button>
       </div>
     </div>
     <div class="sr2">
@@ -700,13 +1025,24 @@ async function renderAdmin(){
     <div id="advm"></div>
     <div id="cpw-wrap" hidden>
       <hr class="div">
-      <div class="ct">Change Password</div>
+      <div class="ct">Change Admin Password</div>
       <div class="r2" style="margin-bottom:11px">
         <div class="f"><label>New Password</label><input type="password" id="npw"></div>
         <div class="f"><label>Confirm</label><input type="password" id="npw2"></div>
       </div>
       <div id="cpm"></div>
-      <button class="btn bp-" onclick="doChPw()">Update Password</button>
+      <button class="btn bp-" onclick="doChPw()">Update Admin Password</button>
+      <hr class="div">
+    </div>
+    <div id="instr-pw-wrap" hidden>
+      <hr class="div">
+      <div class="ct">🎓 Change My (Instructor) Password</div>
+      <div class="r2" style="margin-bottom:11px">
+        <div class="f"><label>New Password</label><input type="password" id="ipw1"></div>
+        <div class="f"><label>Confirm</label><input type="password" id="ipw2"></div>
+      </div>
+      <div id="ipm"></div>
+      <button class="btn bp-" onclick="doChInstrPw()">Save My Password</button>
       <hr class="div">
     </div>
   </div>
@@ -762,6 +1098,54 @@ async function renderAdmin(){
   </div>
 
   <div class="card">
+    <div class="ct">👥 Section Setup</div>
+    <p style="font-size:12px;color:#5A6E8A;margin-bottom:14px">
+      Set how many teams each section has. Click <strong>Save &amp; Initialize</strong> to create missing teams with the default password
+      <code style="background:#F5F7FB;padding:1px 5px;border-radius:4px">fina402</code>. Existing teams with custom passwords are never overwritten.
+    </p>
+    <div class="r2" style="gap:10px;margin-bottom:14px" id="sec-setup-grid">
+      ${[1,2,3,4].map(s=>`
+        <div class="f"><label>Section ${s} — # of Teams</label>
+          <input type="number" id="sec-n-${s}" min="1" max="20" step="1"
+            value="${sectionsConfig[s]||10}" style="width:100%;font-size:14px">
+        </div>`).join('')}
+    </div>
+    <div id="sec-setup-msg" style="margin-bottom:8px"></div>
+    <div style="display:flex;gap:9px;flex-wrap:wrap">
+      <button class="btn bp-" onclick="saveSections()">Save &amp; Initialize Teams</button>
+      <button class="btn bh-" onclick="loadSectionStatus()">↻ Refresh Status</button>
+    </div>
+    <div id="sec-status-wrap" style="margin-top:14px"></div>
+  </div>
+
+  <div class="card">
+    <div class="ct">🔑 Team Password Management</div>
+    <p style="font-size:12px;color:#5A6E8A;margin-bottom:14px">
+      Reset a team's password back to <code style="background:#F5F7FB;padding:1px 5px;border-radius:4px">fina402</code>
+      and force them to set a new one on next login. Or add/remove an individual team.
+    </p>
+    <div class="r2" style="gap:10px;margin-bottom:14px">
+      <div class="f"><label>Section</label>
+        <select id="pm-sec" onchange="pmRefreshTeams()" style="font-size:13px">
+          <option value="">— Select —</option>
+          ${[1,2,3,4].map(s=>`<option value="${s}">Section ${s}</option>`).join('')}
+        </select>
+      </div>
+      <div class="f"><label>Team</label>
+        <select id="pm-team" style="font-size:13px">
+          <option value="">— Select section first —</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn bh-" style="border-color:#DC2626;color:#DC2626" onclick="resetTeamPass()">🔄 Reset to Default Password</button>
+      <button class="btn bg-" onclick="addTeamToSection()">＋ Add Team to Section</button>
+      <button class="btn bh-" style="border-color:#DC2626;color:#DC2626" onclick="removeTeamFromSection()">− Remove Team</button>
+    </div>
+    <div id="pm-msg"></div>
+  </div>
+
+  <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
       <div class="ct" style="margin:0">📋 Week ${activeWeek} — Submissions</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -785,6 +1169,7 @@ async function renderAdmin(){
   buildCfgTable();
   buildSliders('asg',adminAlloc,adminCfg,true);
   loadSubmissions();
+  loadSectionStatus();
 }
 
 /* ── cached submissions ── */
@@ -796,15 +1181,25 @@ async function loadSubmissions(){
   if(!wrap) return;
   wrap.innerHTML = '<div class="msg in" style="font-size:12px">Loading…</div>';
   try{
-    const sn = await fs.collection('submissions').where('week','==',activeWeek).get();
+    const [sn, aiSnap] = await Promise.all([
+      fs.collection('submissions').where('week','==',activeWeek).get(),
+      fs.doc(`config/ai_week_${activeWeek}`).get()
+    ]);
     _cachedSubs = sn.docs.map(d=>{return {id:d.id, ...d.data()};
     }).sort((a,b)=>a.section-b.section||a.team-b.team);
 
     const etfSet = new Set();
     _cachedSubs.forEach(s=>{ Object.keys(s.allocations||{}).forEach(k=>{ if((s.allocations[k]||0)>0) etfSet.add(k); }); });
+    let aiWeekAlloc = null, aiWeekRat = '';
+    if(aiSnap.exists){
+      const d = aiSnap.data();
+      aiWeekRat = d.rationale||'';
+      aiWeekAlloc = {};
+      ETFS.forEach(e=>{ const v=Number(d[e.id])||0; if(v>0){ aiWeekAlloc[e.id]=v; etfSet.add(e.id); } });
+    }
     _usedEtfs = ETFS.filter(e=>etfSet.has(e.id)).map(e=>e.id);
 
-    if(_cachedSubs.length===0){
+    if(_cachedSubs.length===0 && !aiWeekAlloc){
       wrap.innerHTML='<div class="msg wn" style="font-size:12px">No submissions yet for Week '+activeWeek+'.</div>';
       return;
     }
@@ -819,6 +1214,22 @@ async function loadSubmissions(){
         <th></th>
       </tr></thead>
       <tbody>`;
+
+    if(aiWeekAlloc){
+      html += `<tr style="background:#EFF6FF;border-left:3px solid #2563EB">
+        <td colspan="2" style="font-weight:700;color:#1E40AF;font-size:11px;letter-spacing:.04em">🤖 AI BENCHMARK</td>
+        ${_usedEtfs.map(t=>{const v=aiWeekAlloc[t]||0;return `<td style="text-align:right;font-weight:700;color:${v>0?'#1E40AF':'#94A3B8'}">${v>0?v+'%':'—'}</td>`;}).join('')}
+        <td><button onclick="toggleRat('ai-rat-row')" style="background:none;border:1px solid #BFDBFE;border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer;color:#1E40AF">View</button></td>
+        <td style="color:#5A6E8A;font-size:11px">—</td>
+        <td></td>
+      </tr>
+      <tr id="ai-rat-row" hidden>
+        <td colspan="${4+_usedEtfs.length}" style="white-space:normal;background:#EFF6FF;color:#1E40AF;font-size:12px;padding:10px 12px;line-height:1.5;border-left:3px solid #2563EB">
+          <strong style="font-size:10px;text-transform:uppercase;letter-spacing:.05em">🤖 AI Rationale</strong><br>${aiWeekRat||'No rationale set.'}
+        </td>
+      </tr>`;
+    }
+
     _cachedSubs.forEach((s,i)=>{
       const alloc = s.allocations||{};
       const ts = s.submittedAt ? new Date(s.submittedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
@@ -840,7 +1251,7 @@ async function loadSubmissions(){
       </tr>`;
     });
     html += '</tbody></table></div>';
-    html += `<p style="font-size:11px;color:#5A6E8A;margin-top:8px">${_cachedSubs.length} submission${_cachedSubs.length!==1?'s':''} · ${_usedEtfs.length} ETF${_usedEtfs.length!==1?'s':''} used this week</p>`;
+    html += `<p style="font-size:11px;color:#5A6E8A;margin-top:8px">${_cachedSubs.length} submission${_cachedSubs.length!==1?'s':''} · ${_usedEtfs.length} ETF${_usedEtfs.length!==1?'s':''} used this week${aiWeekAlloc?' · 🤖 AI benchmark shown':''}</p>`;
     wrap.innerHTML = html;
   }catch(err){
     wrap.innerHTML=`<div class="msg er" style="font-size:12px">Error: ${err.message}</div>`;
@@ -1002,7 +1413,11 @@ function onChkChange(id){
 async function saveCfg(){
   const m=$('cfg-msg');
   if(adminCfg.activeAssets.length===0){if(m)m.innerHTML='<div class="msg er">Select at least one ETF.</div>';return;}
-  const gMin=adminCfg.globalMin||0, gMax=adminCfg.globalMax||100;
+  // Read constraint inputs directly from DOM to avoid oninput timing issues
+  const rawMin=$('g-min')?.value; const rawMax=$('g-max')?.value;
+  adminCfg.globalMin=(rawMin!==''&&rawMin!=null)?Math.max(0,parseInt(rawMin)||0):0;
+  adminCfg.globalMax=(rawMax!==''&&rawMax!=null)?Math.max(1,parseInt(rawMax)||100):100;
+  const gMin=adminCfg.globalMin, gMax=adminCfg.globalMax;
   if(gMin>=gMax){if(m)m.innerHTML=`<div class="msg er">Min (${gMin}%) must be less than max (${gMax}%).</div>`;return;}
   try{
     await fs.doc(`config/week_cfg_${activeWeek}`).set({
@@ -1010,8 +1425,8 @@ async function saveCfg(){
       weekOpen:adminCfg.weekOpen, allowResubmit:adminCfg.allowResubmit,
     });
     weekCfg={...adminCfg};
-    if(m)m.innerHTML=`<div class="msg ok">✓ Saved — ${adminCfg.activeAssets.length} ETFs, range ${gMin}–${gMax}%.</div>`;
-  }catch(err){if(m)m.innerHTML=`<div class="msg er">Error: ${err.message}</div>`;}
+    if(m)m.innerHTML=`<div class="msg ok">✓ Saved — ${adminCfg.activeAssets.length} ETFs, constraint ${gMin}–${gMax}%.</div>`;
+  }catch(err){if(m)m.innerHTML=`<div class="msg er">Error saving: ${err.message}</div>`;}
 }
 
 async function toggleWeekOpen(open){
@@ -1159,6 +1574,26 @@ async function advWeek(){
     updateChip();renderAdmin();
     const m=$('advm');if(m)m.innerHTML=`<div class="msg ok">✓ Week ${next} open. Assets reset to sectors — configure as needed.</div>`;
   }catch(err){alert('Error: '+err.message);}
+}
+
+function showChInstrPass(){
+  const w=$('instr-pw-wrap');
+  if(w) w.hidden=!w.hidden;
+  $('cpw-wrap').hidden=true;
+}
+
+async function doChInstrPw(){
+  const pw1=$('ipw1').value, pw2=$('ipw2').value;
+  const msg=$('ipm');
+  if(pw1.length<6){msg.innerHTML='<div class="msg er">Min 6 characters.</div>';return;}
+  if(pw1!==pw2){msg.innerHTML='<div class="msg er">Passwords do not match.</div>';return;}
+  try{
+    const h=await sha256(pw1);
+    await fs.doc('config/settings').set({instructorHash:h},{merge:true});
+    instructorHash=h;
+    msg.innerHTML='<div class="msg ok">✓ Instructor password updated.</div>';
+    $('ipw1').value=''; $('ipw2').value='';
+  }catch(e){msg.innerHTML=`<div class="msg er">Error: ${e.message}</div>`;}
 }
 
 function showCpw(){const w=$('cpw-wrap');if(w)w.hidden=!w.hidden;}
