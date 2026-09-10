@@ -253,18 +253,24 @@ var dl=Math.floor((nThu-today)/86400000);
 if(dl<0){nWk++;nFri=addD(FF,nWk*7);nThu=addD(nFri,-1);dl=Math.floor((nThu-today)/86400000);}
 var dispWk=nWk+1;
 var bTxt,bBg;
+function fmtWeek(mon,thu){
+var mStr=mon.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
+var tDay=thu.toLocaleDateString('en-US',{day:'numeric',timeZone:'UTC'});
+var mMo=mon.toLocaleDateString('en-US',{month:'short',timeZone:'UTC'});
+var tMo=thu.toLocaleDateString('en-US',{month:'short',timeZone:'UTC'});
+return mMo===tMo?mStr+'-'+tDay:mStr+' – '+tMo+' '+tDay;}
+var weekMon=addD(nThu,-3);
+var weekRange=fmtWeek(weekMon,nThu);
+var bTxt,bBg;
 if(dl===0){
-bTxt='🔴 Deadline <strong>TODAY</strong> (Thursday) — submit <strong>Week '+dispWk+'</strong> allocation by market close. New portfolio starts Friday '+fmt(nFri)+'.';
+bTxt='🔴 Deadline: <strong>Week of '+weekRange+' (TODAY)</strong> — submit <strong>Week '+dispWk+'</strong> allocation by end of 2nd lecture today. New allocation will be applied to portfolio starting Friday '+fmt(nFri)+'.';
 bBg='background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.3);color:#DC2626';}
-else if(dl<=2){
-bTxt='🟡 Deadline: <strong>'+fmt(nThu)+' (Thursday)</strong> — '+dl+' day'+(dl!==1?'s':'')+' away — submit <strong>Week '+dispWk+'</strong> allocation by market close. New portfolio starts Friday '+fmt(nFri)+'.';
-bBg='background:rgba(217,119,6,.1);border:1px solid rgba(217,119,6,.3);color:#92400E';}
 else{
-bTxt='📅 Deadline: <strong>'+fmt(nThu,true)+' (Thursday)</strong> — '+dl+' days away — submit <strong>Week '+dispWk+'</strong> allocation by market close. New portfolio starts Friday '+fmt(nFri)+'.';
-bBg='background:var(--tag);border:1px solid var(--border);color:var(--muted)';}
+bTxt='🟡 Deadline: <strong>Week of '+weekRange+'</strong> — submit <strong>Week '+dispWk+'</strong> allocation by end of 2nd lecture of the week. New allocation will be applied to portfolio starting Friday '+fmt(nFri)+'.';
+bBg='background:rgba(217,119,6,.1);border:1px solid rgba(217,119,6,.3);color:#92400E';}
 var uStart=nWk+1;
 var items=[];
-for(var i=0;i<4;i++){var wk=uStart+i,fri=addD(FF,wk*7),thu=addD(fri,-1);items.push('<strong>W'+(wk+1)+'</strong> submit by '+fmt(thu)+' → starts '+fmt(fri));}
+for(var i=0;i<4;i++){var wk=uStart+i,fri=addD(FF,wk*7),thu=addD(fri,-1),mon=addD(thu,-3);items.push('<strong>W'+(wk+1)+'</strong> Week of '+fmtWeek(mon,thu)+' → starts '+fmt(fri));}
 var b=document.getElementById('deadline-banner');
 var s=document.getElementById('deadline-schedule');
 if(b){b.style.cssText='font-size:12px;padding:10px 14px;border-radius:7px;margin-bottom:6px;'+bBg;b.innerHTML=bTxt;}
