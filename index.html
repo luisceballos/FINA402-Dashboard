@@ -238,8 +238,36 @@ canvas{max-width:100%}
 <div class="section-title">Current Portfolio Allocations — Rebalancing Reference</div>
 <div class="card">
   <div class="card-title">Active allocations &amp; next rebalancing deadline — submit changes by each Friday open</div>
-<div style='font-size:12px;padding:10px 14px;border-radius:7px;margin-bottom:6px;background:rgba(217,119,6,.1);border:1px solid rgba(217,119,6,.3);color:#92400E'>🟡 Deadline: <strong>Sep 10 (Thursday)</strong> — 1 day away — submit <strong>Week 1</strong> allocation by market close. New portfolio starts Friday Sep 11.</div>
-<div style='font-size:10.5px;color:var(--muted);padding:6px 14px 10px;border-radius:6px;background:var(--tag);margin-bottom:14px;line-height:1.8'>📆 Upcoming deadlines: <strong>W1</strong> submit by Sep 10 → starts Sep 11 &nbsp;|&nbsp; <strong>W2</strong> submit by Sep 17 → starts Sep 18 &nbsp;|&nbsp; <strong>W3</strong> submit by Sep 24 → starts Sep 25 &nbsp;|&nbsp; <strong>W4</strong> submit by Oct 01 → starts Oct 02</div>
+<div id='deadline-banner' style='font-size:12px;padding:10px 14px;border-radius:7px;margin-bottom:6px;background:var(--tag);border:1px solid var(--border);color:var(--muted)'>Loading deadline…</div>
+<div id='deadline-schedule' style='font-size:10.5px;color:var(--muted);padding:6px 14px 10px;border-radius:6px;background:var(--tag);margin-bottom:14px;line-height:1.8'>📆 Upcoming deadlines: …</div>
+<script>(function(){
+var FF=new Date('2026-09-04T00:00:00');
+function addD(d,n){var r=new Date(d);r.setDate(r.getDate()+n);return r;}
+function fmt(d,yr){var o={month:'short',day:'numeric',timeZone:'UTC'};if(yr)o.year='numeric';return d.toLocaleDateString('en-US',o);}
+var today=new Date();today.setHours(0,0,0,0);
+var diff=Math.floor((today-FF)/86400000);
+var cw=Math.floor(diff/7);
+var nFri=addD(FF,(cw+1)*7),nThu=addD(nFri,-1);
+var dl=Math.floor((nThu-today)/86400000);
+var nWk=cw+1;
+var bTxt,bBg;
+if(dl<=0){
+bTxt='🔴 Deadline <strong>TODAY</strong> (Thursday) — submit <strong>Week '+nWk+'</strong> allocation by market close. New portfolio starts Friday '+fmt(nFri)+'.';
+bBg='background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.3);color:#DC2626';}
+else if(dl<=2){
+bTxt='🟡 Deadline: <strong>'+fmt(nThu)+' (Thursday)</strong> — '+dl+' day'+(dl!==1?'s':'')+' away — submit <strong>Week '+nWk+'</strong> allocation by market close. New portfolio starts Friday '+fmt(nFri)+'.';
+bBg='background:rgba(217,119,6,.1);border:1px solid rgba(217,119,6,.3);color:#92400E';}
+else{
+bTxt='📅 Deadline: <strong>'+fmt(nThu,true)+' (Thursday)</strong> — '+dl+' days away — submit <strong>Week '+nWk+'</strong> allocation by market close. New portfolio starts Friday '+fmt(nFri)+'.';
+bBg='background:var(--tag);border:1px solid var(--border);color:var(--muted)';}
+var uStart=(dl<=0)?nWk+1:nWk;
+var items=[];
+for(var i=0;i<4;i++){var wk=uStart+i,fri=addD(FF,wk*7),thu=addD(fri,-1);items.push('<strong>W'+wk+'</strong> submit by '+fmt(thu)+' → starts '+fmt(fri));}
+var b=document.getElementById('deadline-banner');
+var s=document.getElementById('deadline-schedule');
+if(b){b.style.cssText='font-size:12px;padding:10px 14px;border-radius:7px;margin-bottom:6px;'+bBg;b.innerHTML=bTxt;}
+if(s){s.innerHTML='📆 Upcoming deadlines: '+items.join(' &nbsp;|&nbsp; ');}
+})()</script>
 <div style='margin-bottom:14px'><div style='font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px'>🤖 AI Benchmark — Week 0 — Default (100% SPY)</div><div style='overflow-x:auto'><table class='etf-table' style='max-width:360px'><tbody><tr><td class='tk'>SPY</td><td style='width:100%;padding:4px 8px'><div style='display:flex;align-items:center;gap:6px'><div style='height:10px;width:100%;min-width:4px;max-width:100%;background:var(--navy);border-radius:3px;opacity:.75'></div><span style='font-size:11px;font-variant-numeric:tabular-nums;font-weight:600'>100.0%</span></div></td></tr></tbody></table></div></div>
 <div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px'>
 <div><div style='font-size:11px;font-weight:700;color:#2563EB;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid #2563EB22'>Section 1</div><div style='margin-bottom:10px'><div style='display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px'><span style='font-size:12px;font-weight:700;color:var(--text)'>S1-T01</span><span style='font-size:10px;color:var(--muted)'>Wk 0 — SPY default</span></div><table class='etf-table'><tbody><tr><td class='tk'>SPY</td><td style='width:100%;padding:4px 8px'><div style='display:flex;align-items:center;gap:6px'><div style='height:10px;width:100%;min-width:4px;max-width:100%;background:var(--navy);border-radius:3px;opacity:.75'></div><span style='font-size:11px;font-variant-numeric:tabular-nums;font-weight:600'>100.0%</span></div></td></tr></tbody></table></div>
