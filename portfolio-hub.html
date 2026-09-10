@@ -313,6 +313,7 @@ let adminAuth  = false;
 let instructorHash = ''; // SHA-256 of instructor password, loaded from Firebase
 let teamSession = null; // {team, section, teamNum, passHash}
 let sectionsConfig = {}; // {1:5, 2:6, ...} from Firebase
+let sectionControl = {1:true,2:true,3:true,4:true}; // per-section open/close
 let teamPasswords  = {}; // {"S1-T1": {hash, mustChange}} from Firebase
 
 const $  = id => document.getElementById(id);
@@ -458,12 +459,14 @@ async function init(){
 
     // Load sections config, team passwords, and instructor hash
     try{
-      const [sc, tp] = await Promise.all([
+      const [sc, tp, sctrl] = await Promise.all([
         fs.doc('config/sections').get(),
-        fs.doc('config/team_passwords').get()
+        fs.doc('config/team_passwords').get(),
+        fs.doc('config/section_control').get()
       ]);
       if(sc.exists) sectionsConfig=sc.data();
       if(tp.exists) teamPasswords=tp.data();
+      if(sctrl.exists) sectionControl=Object.assign({1:true,2:true,3:true,4:true},sctrl.data());
     }catch(_){}
     // Init instructor hash (default: mikepatton)
     try{
@@ -543,7 +546,7 @@ function renderForm(){
     <div class="ct">Team Identification</div>
     <div class="r2">
       <div class="f"><label>Section</label>
-        <select id="ss" onchange="onTC()" ${teamSession?'disabled':''}>
+        <select id="ss" onchange="onTC();onSecChange()" ${teamSession?'disabled':''}>
           <option value="">— Select your section —</option>
           <option value="1">Section 1</option>
           <option value="2">Section 2</option>
@@ -596,6 +599,9 @@ function renderForm(){
       <textarea id="rat" placeholder="We are overweighting Technology because…"></textarea></div>
   </div>
 
+  <div id="sec-closed-notice" hidden style="background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.3);border-radius:7px;padding:12px 16px;margin-bottom:10px;font-size:13px;color:#DC2626;text-align:center">
+    🔒 <strong>Section <span id="sec-closed-num"></span> is currently closed.</strong> Your instructor will open submissions during class.
+  </div>
   <div id="fm"></div>
   <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:8px">
     <button class="btn bp-" id="sb" onclick="doSubmit()">Submit Allocation</button>
@@ -607,7 +613,7 @@ function renderForm(){
     const ss=$('ss'), st=$('st');
     if(ss){ ss.value=teamSession.section; }
     if(st){ st.value=teamSession.teamNum; }
-    onTC();
+    onTC();onSecChange();
   }
 }
 
@@ -750,11 +756,21 @@ async function onTC(){
   }
 }
 
+function onSecChange(){
+  const sec=Number($('ss')?.value);
+  const notice=$('sec-closed-notice'), btn=$('sb');
+  if(!sec){if(notice)notice.hidden=true;return;}
+  const open=sectionControl[sec]!==false;
+  if(notice){notice.hidden=open;const num=$('sec-closed-num');if(num)num.textContent=sec;}
+  if(btn)btn.disabled=!open;
+}
+
 /* ── submit ── */
 async function doSubmit(){
   const sec=$('ss')?.value, tm=$('st')?.value, fm=$('fm');
   if(!sec||!tm){if(fm)fm.innerHTML='<div class="msg er">Select your section and team first.</div>';return;}
   if(!weekCfg.weekOpen){if(fm)fm.innerHTML='<div class="msg er">Week '+activeWeek+' is closed. Submissions are no longer accepted.</div>';return;}
+  if(sectionControl[Number(sec)]===false){if(fm)fm.innerHTML='<div class="msg er">Section '+sec+' is currently closed. Your instructor will open submissions during class.</div>';return;}
   if(!weekCfg.allowResubmit){
     const existing=await fs.doc(`submissions/S${sec}-T${tm}-W${activeWeek}`).get();
     if(existing.exists){if(fm)fm.innerHTML='<div class="msg er">You already submitted Week '+activeWeek+'. Contact your instructor to make changes.</div>';return;}
@@ -1008,11 +1024,26 @@ async function renderAdmin(){
       <div class="sb"><div class="sn">${tot}</div><div class="sl">Total Submissions</div></div>
       ${[1,2,3,4].map(s=>`<div class="sb"><div class="sn">${counts[s]}</div><div class="sl">Section ${s}</div></div>`).join('')}
     </div>
-    <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:18px">
+    <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px">
       ${weekCfg.weekOpen
         ?`<button class="btn bh-" style="border-color:#DC2626;color:#DC2626" onclick="toggleWeekOpen(false)">🔒 Close Week ${activeWeek}</button>`
         :`<button class="btn bg-" onclick="toggleWeekOpen(true)">🔓 Re-Open Week ${activeWeek}</button>`}
       <button class="btn bg-" onclick="advWeek()">→ Open Week ${activeWeek+1}</button>
+    </div>
+    <div style="background:#F5F7FB;border:1.5px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:18px">
+      <div style="font-size:11px;font-weight:700;color:#1E3A5F;margin-bottom:10px;letter-spacing:.05em;text-transform:uppercase">📋 Per-Section Submission Control</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${[1,2,3,4].map(s=>{
+          const open=sectionControl[s]!==false;
+          return `<div style="display:flex;flex-direction:column;align-items:center;gap:5px;background:${open?'rgba(16,185,129,.08)':'rgba(220,38,38,.08)'};border:1.5px solid ${open?'rgba(16,185,129,.4)':'rgba(220,38,38,.3)'};border-radius:8px;padding:10px 16px;min-width:95px;text-align:center">
+            <span style="font-size:12px;font-weight:700;color:#1E3A5F">Section ${s}</span>
+            <span style="font-size:18px">${open?'🟢':'🔴'}</span>
+            <span style="font-size:10px;font-weight:600;color:${open?'#059669':'#DC2626'}">${open?'OPEN':'CLOSED'}</span>
+            <button class="btn" style="font-size:10px;padding:4px 10px;background:${open?'rgba(220,38,38,.1)':'rgba(16,185,129,.1)'};border:1px solid ${open?'rgba(220,38,38,.4)':'rgba(16,185,129,.4)'};color:${open?'#DC2626':'#059669'}" onclick="toggleSection(${s},${!open})">${open?'🔒 Close':'🔓 Open'}</button>
+          </div>`;
+        }).join('')}
+      </div>
+      <div id="secctrl-msg" style="margin-top:8px;font-size:12px"></div>
     </div>
     <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#F5F7FB;border:1.5px solid var(--border);border-radius:8px;margin-bottom:18px;flex-wrap:wrap">
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
@@ -1439,6 +1470,17 @@ async function toggleWeekOpen(open){
     const m=$('advm');
     if(m)m.innerHTML=`<div class="msg ${open?'ok':'wn'}">✓ Week ${activeWeek} is now <strong>${open?'Open — students can submit':'Closed — submissions blocked'}</strong>.</div>`;
     updateChip(); renderAdmin();
+  }catch(err){alert('Error: '+err.message);}
+}
+
+async function toggleSection(sec,open){
+  try{
+    const patch={};patch[sec]=open;
+    await fs.doc('config/section_control').set(patch,{merge:true});
+    sectionControl[sec]=open;
+    const m=$('secctrl-msg');
+    if(m)m.innerHTML=`<div class="msg ${open?'ok':'wn'}">✓ Section ${sec} is now <strong>${open?'Open — students can submit':'Closed — submissions blocked'}</strong>.</div>`;
+    renderAdmin();
   }catch(err){alert('Error: '+err.message);}
 }
 
