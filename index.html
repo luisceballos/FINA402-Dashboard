@@ -496,7 +496,7 @@ if(s){s.innerHTML='📆 Upcoming deadlines: '+items.join(' &nbsp;|&nbsp; ');}
   <div id="holdings-error" style="display:none;text-align:center;padding:32px 20px;color:var(--red);font-size:13px"></div>
   <div id="holdings-content" style="display:none">
     <style>@media(max-width:640px){#h-chart-row{grid-template-columns:1fr!important}}</style>
-    <div class="tiles" id="h-stats" style="grid-template-columns:repeat(4,1fr)"></div>
+    <div class="tiles" id="h-stats" style="grid-template-columns:repeat(2,1fr);max-width:440px"></div>
     <div id="h-chart-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
       <div class="card">
         <div class="card-title">Average Allocation by ETF</div>
@@ -511,16 +511,14 @@ if(s){s.innerHTML='📆 Upcoming deadlines: '+items.join(' &nbsp;|&nbsp; ');}
       <div class="card-title">Section × ETF Heatmap &nbsp;·&nbsp; <span style="font-size:10px;text-transform:none;letter-spacing:0;color:var(--muted)">average allocation %</span></div>
       <div style="overflow-x:auto" id="h-heatmap"></div>
     </div>
-    <div class="section-title">Team Breakdown</div>
-    <div class="card" style="margin-bottom:12px"><div id="h-teams"></div></div>
     <div class="section-title">Investment Rationale</div>
     <div class="card" style="margin-bottom:12px">
       <div class="card-title">Key Investment Themes</div>
       <div id="h-themes" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px;margin-top:8px"></div>
     </div>
-    <div class="card" style="margin-bottom:12px">
-      <div class="card-title">Top Keywords</div>
-      <div id="h-keywords" style="display:flex;flex-wrap:wrap;gap:7px;margin-top:10px"></div>
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title">Word Cloud — Rationale Keywords</div>
+      <canvas id="h-wordcloud" style="width:100%;display:block;margin-top:8px"></canvas>
     </div>
   </div>
 </div><!-- end page-holdings -->
@@ -919,6 +917,7 @@ function filterSection(sec, btn) {
 renderPerfChart('all');
 
 /* ── Holdings Tab ────────────────────────────────────────────────── */
+const _H_FF       = new Date('2026-09-04T00:00:00');
 const _H_WEEK_KEY = 'fina402_holdings_week';
 let holdingsWeek   = (()=>{ try { return parseInt(localStorage.getItem(_H_WEEK_KEY)||'2',10)||2; } catch(e){ return 2; } })();
 let holdingsLoaded = false;
@@ -985,6 +984,70 @@ async function loadHoldings(week) {
   }
 }
 
+function hDrawWordCloud(words) {
+  const canvas = document.getElementById('h-wordcloud');
+  if (!canvas || !words.length) return;
+  // Size canvas to fill card width
+  const W = canvas.parentElement.clientWidth - 32 || 560;
+  const H = Math.max(220, Math.round(W * 0.42));
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  // Detect dark mode
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+    (!document.documentElement.getAttribute('data-theme') &&
+     window.matchMedia('(prefers-color-scheme:dark)').matches);
+  const palette = dark
+    ? ['#60A5FA','#93C5FD','#FCD34D','#6EE7B7','#A5B4FC','#F9A8D4','#7DD3FC','#86EFAC']
+    : ['#1E40AF','#2563EB','#D97706','#059669','#7C3AED','#DB2777','#0284C7','#16A34A'];
+
+  const maxFreq = words[0][1];
+  const placed  = [];  // [{x,y,w,h}]
+
+  function hits(x, y, w, h) {
+    const pad = 4;
+    for (const p of placed) {
+      if (x < p.x + p.w + pad && x + w + pad > p.x &&
+          y < p.y + p.h + pad && y + h + pad > p.y) return true;
+    }
+    return false;
+  }
+
+  words.forEach(([word, freq], idx) => {
+    const ratio = freq / maxFreq;
+    const sz    = Math.round(11 + ratio * 26);
+    const bold  = ratio > 0.55 ? '700 ' : ratio > 0.3 ? '600 ' : '';
+    ctx.font = `${bold}${sz}px system-ui,sans-serif`;
+    const tw = ctx.measureText(word).width;
+    const th = sz * 1.25;
+    const color = palette[idx % palette.length];
+
+    // Archimedean spiral outward from center
+    let ok = false;
+    const cx = W / 2, cy = H / 2;
+    for (let t = 0; t < 800; t++) {
+      const angle = t * 0.22;
+      const r     = t * (Math.max(W,H) / 1800);
+      const x = cx + r * Math.cos(angle) - tw / 2;
+      const y = cy + r * Math.sin(angle) * 0.7 - th / 2;
+      if (x < 2 || x + tw > W - 2 || y < 2 || y + th > H - 2) continue;
+      if (!hits(x, y, tw, th)) {
+        ctx.fillStyle = color;
+        ctx.fillText(word, x, y + sz);
+        placed.push({x, y, w: tw, h: th});
+        ok = true;
+        break;
+      }
+    }
+  });
+}
+
 function hGetUsedETFs(subs) {
   const totals = {};
   subs.forEach(s => Object.entries(s.allocations).forEach(([etf, pct]) => {
@@ -1004,13 +1067,23 @@ function hRender(subs, week) {
   const etfs = hGetUsedETFs(subs);
   const sections = [...new Set(subs.map(s=>s.section))].sort((a,b)=>a-b);
 
-  // Stats row
+  // Stats row — week date range + ETFs only
   const statsEl = document.getElementById('h-stats');
+  function _hFmtDate(d) {
+    return d.toLocaleDateString('en-US', {month:'short', day:'numeric', timeZone:'UTC'});
+  }
+  function _hWeekRange(w) {
+    const fri = new Date(_H_FF); fri.setDate(fri.getDate() + (w-1)*7);
+    const thu = new Date(fri);   thu.setDate(fri.getDate() + 6);
+    const friStr = _hFmtDate(fri);
+    const thuStr = fri.getMonth() === thu.getMonth()
+      ? thu.toLocaleDateString('en-US', {day:'numeric', timeZone:'UTC'})
+      : _hFmtDate(thu);
+    return friStr + '–' + thuStr;
+  }
   statsEl.innerHTML = [
-    { label:'Week', val:'W'+week, sub:'' },
-    { label:'Submissions', val:subs.length, sub: sections.length+' section'+(sections.length!==1?'s':'') },
-    { label:'ETFs Used', val:etfs.length, sub:'out of universe' },
-    { label:'Avg Team Size', val:(subs.length/Math.max(1,[...new Set(subs.map(s=>s.section+'_'+s.team))].length)).toFixed(1), sub:'submissions/team' }
+    { label:'Week', val:'W'+week, sub:_hWeekRange(week) },
+    { label:'ETFs Used', val:etfs.length, sub:'across all portfolios' }
   ].map(t=>`<div class="tile"><div class="tile-label">${t.label}</div><div class="tile-val">${t.val}</div><div class="tile-sub">${t.sub}</div></div>`).join('');
 
   // Avg allocation bar chart
@@ -1082,34 +1155,7 @@ function hRender(subs, week) {
   html += '</tbody></table>';
   heatEl.innerHTML = html;
 
-  // Teams accordion
-  const teamsEl = document.getElementById('h-teams');
-  teamsEl.innerHTML = '';
-  sections.forEach(sec => {
-    const secSubs = subs.filter(s=>s.section===sec).sort((a,b)=>a.team-b.team);
-    const wrapper = document.createElement('div');
-    wrapper.style.cssText = 'margin-bottom:8px';
-    const hdr = document.createElement('div');
-    hdr.style.cssText = 'font-weight:600;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding:6px 0;cursor:pointer;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border)';
-    hdr.innerHTML = `<span>▶</span> Section ${sec} <span style="font-weight:400;font-size:11px">(${secSubs.length} team${secSubs.length!==1?'s':''})</span>`;
-    const body = document.createElement('div');
-    body.style.display = 'none';
-    hdr.onclick = () => {
-      const open = body.style.display !== 'none';
-      body.style.display = open ? 'none' : '';
-      hdr.querySelector('span').textContent = open ? '▶' : '▼';
-    };
-    secSubs.forEach(s => {
-      const row = document.createElement('div');
-      row.style.cssText = 'padding:8px 4px;border-bottom:1px solid var(--border);font-size:12px';
-      const allocStr = Object.entries(s.allocations).sort((a,b)=>b[1]-a[1])
-        .map(([etf,pct])=>`<span style="display:inline-block;background:var(--tag);color:var(--text);padding:2px 7px;border-radius:10px;margin:2px">${etf} ${pct.toFixed(0)}%</span>`).join('');
-      row.innerHTML = `<div style="font-weight:600;color:var(--text);margin-bottom:4px">Team ${s.team}</div><div style="margin-bottom:4px">${allocStr}</div><div style="color:var(--muted);font-size:11px;line-height:1.5">${s.rationale||'<em>No rationale</em>'}</div>`;
-      body.appendChild(row);
-    });
-    wrapper.appendChild(hdr); wrapper.appendChild(body);
-    teamsEl.appendChild(wrapper);
-  });
+  // (Team breakdown removed)
 
   // Themes
   const THEMES = [
@@ -1135,22 +1181,17 @@ function hRender(subs, week) {
     </div>`;
   }).join('');
 
-  // Keywords cloud
-  const stopwords = new Set(['the','a','an','and','or','but','in','on','at','to','for','of','with','by','is','are','was','were','be','been','as','it','its','this','that','we','our','their','from','portfolio','allocation','etf','fund','invest']);
-  const wordFreq = {};
+  // Word cloud — canvas-based
+  const _H_STOP = new Set(['the','a','an','and','or','but','in','on','at','to','for','of','with','by','is','are','was','were','be','been','as','it','its','this','that','we','our','their','from','portfolio','allocation','etf','fund','invest','will','have','has','has','also','which','that','these','those','such','more','would','should','can','been','both']);
+  const _wFreq = {};
   subs.forEach(s => {
-    s.rationale.toLowerCase().replace(/[^a-z\s]/g,'').split(/\s+/).forEach(w => {
-      if (w.length>3 && !stopwords.has(w)) wordFreq[w] = (wordFreq[w]||0)+1;
+    s.rationale.toLowerCase().replace(/[^a-z\s'-]/g,' ').split(/\s+/).forEach(w => {
+      w = w.replace(/^'+|'+$/g,'');
+      if (w.length > 3 && !_H_STOP.has(w)) _wFreq[w] = (_wFreq[w]||0) + 1;
     });
   });
-  const topWords = Object.entries(wordFreq).sort((a,b)=>b[1]-a[1]).slice(0,30);
-  const maxFreq = topWords[0]?.[1] || 1;
-  const kwEl = document.getElementById('h-keywords');
-  kwEl.innerHTML = topWords.map(([w,f]) => {
-    const sz = Math.round(10 + (f/maxFreq)*8);
-    const op = (0.5 + (f/maxFreq)*0.5).toFixed(2);
-    return `<span style="font-size:${sz}px;opacity:${op};background:var(--tag);color:var(--text);padding:3px 9px;border-radius:12px;white-space:nowrap">${w}</span>`;
-  }).join('');
+  const _topWords = Object.entries(_wFreq).sort((a,b)=>b[1]-a[1]).slice(0,50);
+  hDrawWordCloud(_topWords);
 }
 
 /* ── Settings password — Firebase-backed (global across devices) ── */
