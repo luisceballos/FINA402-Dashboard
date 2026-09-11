@@ -974,9 +974,9 @@ async function loadHoldings(week) {
         };
       });
     if (!subs.length) throw new Error('No submissions found for Week ' + week);
+    elLoad.style.display = 'none'; elCont.style.display = '';
     hRender(subs, week);
     holdingsLoaded = true;
-    elLoad.style.display = 'none'; elCont.style.display = '';
   } catch(e) {
     elLoad.style.display = 'none';
     elErr.style.display = '';
@@ -987,8 +987,12 @@ async function loadHoldings(week) {
 function hDrawWordCloud(words) {
   const canvas = document.getElementById('h-wordcloud');
   if (!canvas || !words.length) return;
+  requestAnimationFrame(() => _hDrawWordCloudNow(canvas, words));
+}
+function _hDrawWordCloudNow(canvas, words) {
   // Size canvas to fill card width
-  const W = canvas.parentElement.clientWidth - 32 || 560;
+  const W = canvas.parentElement ? (canvas.parentElement.clientWidth - 32) : 0;
+  if (W < 10) { setTimeout(() => _hDrawWordCloudNow(canvas, words), 60); return; }
   const H = Math.max(220, Math.round(W * 0.42));
   const dpr = window.devicePixelRatio || 1;
   canvas.width  = W * dpr;
