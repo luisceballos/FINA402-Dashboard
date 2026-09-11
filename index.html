@@ -107,15 +107,48 @@ canvas{max-width:100%}
 .bp-{background:var(--navy);color:#fff}.bp-:hover{opacity:.88}
 .bh-{background:var(--tag);color:var(--navy);border:1px solid var(--border)}.bh-:hover{background:var(--border)}
 .msg{font-size:12px;margin:8px 0 4px}.er{color:#DC2626}
+.etfi{background:none;border:1px solid var(--navy);color:var(--navy);border-radius:50%;width:15px;height:15px;font-size:9px;cursor:pointer;padding:0;line-height:13px;vertical-align:middle;margin-left:3px;opacity:.7}.etfi:hover{opacity:1;background:var(--navy);color:#fff}
+.etf-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center}
+.etf-modal-overlay.open{display:flex}
+.etf-modal{background:var(--card);border-radius:10px;padding:22px 24px;max-width:380px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.18);position:relative}
+.etf-modal h3{margin:0 0 6px;font-size:14px;color:var(--navy)}
+.etf-modal p{font-size:12px;color:var(--text);margin:0 0 12px;line-height:1.55}
+.etf-modal ul{margin:0;padding-left:18px;font-size:12px;color:var(--text)}
+.etf-modal ul li{margin-bottom:3px}
+.etf-modal-close{position:absolute;top:10px;right:12px;background:none;border:none;font-size:18px;cursor:pointer;color:var(--muted);line-height:1}.etf-modal-close:hover{color:var(--navy)}
 </style>
 </head>
 <body>
+
+<!-- ETF INFO MODAL -->
+<div class="etf-modal-overlay" id="etfOverlay" onclick="if(event.target===this)closeEtf()">
+  <div class="etf-modal">
+    <button class="etf-modal-close" onclick="closeEtf()">&#x2715;</button>
+    <h3 id="etfModalTitle"></h3>
+    <p id="etfModalDesc"></p>
+    <div id="etfModalHoldings"></div>
+  </div>
+</div>
+<script>
+var ETF_INFO={"SPY": {"desc": "Tracks the S&P 500 — 500 largest US companies by market cap. Most traded ETF in the world.", "top": ["Apple (AAPL)", "Microsoft (MSFT)", "NVIDIA (NVDA)", "Amazon (AMZN)", "Meta (META)"]}, "QQQ": {"desc": "Tracks the Nasdaq-100 — 100 largest non-financial Nasdaq companies, heavily weighted toward tech.", "top": ["Apple (AAPL)", "Microsoft (MSFT)", "NVIDIA (NVDA)", "Amazon (AMZN)", "Meta (META)"]}, "IWM": {"desc": "Tracks the Russell 2000 — 2,000 small-cap US stocks. More domestic-focused than large-cap indexes.", "top": ["Diversified across 2,000 small caps", "Sprouts Farmers Market", "Shift4 Payments", "Abercrombie & Fitch", "WEX Inc."]}, "DIA": {"desc": "Tracks the Dow Jones Industrial Average — 30 blue-chip US companies. Price-weighted (not market-cap).", "top": ["UnitedHealth Group", "Goldman Sachs", "Microsoft", "McDonald's", "Home Depot"]}, "XLK": {"desc": "Technology Select Sector SPDR. Software, hardware, semiconductors, and IT services.", "top": ["Apple (AAPL)", "NVIDIA (NVDA)", "Microsoft (MSFT)", "Broadcom (AVGO)", "Salesforce (CRM)"]}, "XLF": {"desc": "Financials Select Sector SPDR. Banks, insurance, diversified financials.", "top": ["Berkshire Hathaway", "JPMorgan Chase", "Visa", "Mastercard", "Bank of America"]}, "XLE": {"desc": "Energy Select Sector SPDR. Oil & gas exploration, production, and integrated energy companies.", "top": ["ExxonMobil", "Chevron", "ConocoPhillips", "EOG Resources", "Schlumberger"]}, "XLV": {"desc": "Health Care Select Sector SPDR. Pharmaceuticals, biotech, medical devices, and health insurers.", "top": ["UnitedHealth Group", "Eli Lilly", "Johnson & Johnson", "AbbVie", "Merck"]}, "XLY": {"desc": "Consumer Discretionary SPDR. Non-essential goods and services — retail, autos, leisure.", "top": ["Amazon", "Tesla", "Home Depot", "McDonald's", "Nike"]}, "XLP": {"desc": "Consumer Staples SPDR. Essential goods: food, beverages, household products. Defensive in downturns.", "top": ["Procter & Gamble", "Costco", "Walmart", "Coca-Cola", "PepsiCo"]}, "XLU": {"desc": "Utilities Select Sector SPDR. Electric, gas, and water utilities. Defensive, dividend-heavy sector.", "top": ["NextEra Energy", "Southern Company", "Duke Energy", "Sempra", "Dominion Energy"]}, "XLB": {"desc": "Materials Select Sector SPDR. Chemicals, mining, paper/forest products, and construction materials.", "top": ["Linde", "Air Products", "Sherwin-Williams", "Freeport-McMoRan", "Nucor"]}, "XLI": {"desc": "Industrials Select Sector SPDR. Aerospace, defense, machinery, transportation, and construction.", "top": ["GE Aerospace", "Caterpillar", "RTX (Raytheon)", "Honeywell", "Union Pacific"]}, "XLRE": {"desc": "Real Estate Select Sector SPDR. REITs across residential, commercial, industrial and data center property types.", "top": ["Prologis", "American Tower", "Equinix", "Welltower", "Simon Property Group"]}, "XLC": {"desc": "Communication Services SPDR. Social media, internet, telecom, and media & entertainment companies.", "top": ["Meta Platforms", "Alphabet (Google)", "Netflix", "T-Mobile", "Walt Disney"]}, "SSO": {"desc": "ProShares Ultra S&P 500. Seeks 2× the DAILY return of the S&P 500 via swaps. Volatility decay over time — not for long-term holds.", "top": ["S&P 500 swaps / futures", "Cash collateral", "US Treasury instruments", "(Derivative-based — no direct stock holdings)"]}, "UPRO": {"desc": "ProShares UltraPro S&P 500. Seeks 3× the DAILY return of the S&P 500. High volatility drag — rebalances daily.", "top": ["S&P 500 swaps / futures", "Cash collateral", "US Treasury instruments", "(Derivative-based — no direct stock holdings)"]}, "QLD": {"desc": "ProShares Ultra QQQ. Seeks 2× the DAILY return of the Nasdaq-100. Significant volatility decay in choppy markets.", "top": ["Nasdaq-100 swaps / futures", "Cash collateral", "US Treasury instruments", "(Derivative-based)"]}, "TQQQ": {"desc": "ProShares UltraPro QQQ. Seeks 3× the DAILY return of Nasdaq-100. Extreme volatility — decays rapidly in sideways markets.", "top": ["Nasdaq-100 swaps / futures", "Cash collateral", "US Treasury instruments", "(Derivative-based)"]}, "SH": {"desc": "ProShares Short S&P 500. Seeks −1× (inverse) daily return of S&P 500. Gains when the market falls.", "top": ["S&P 500 short swaps / futures", "Cash collateral", "US Treasury instruments", "(Inverse derivative-based)"]}, "SDS": {"desc": "ProShares UltraShort S&P 500. Seeks −2× daily return of S&P 500. Amplified inverse exposure.", "top": ["S&P 500 short swaps / futures", "Cash collateral", "US Treasury instruments", "(Inverse derivative-based)"]}, "PSQ": {"desc": "ProShares Short QQQ. Seeks −1× daily return of Nasdaq-100. Profits when tech-heavy index falls.", "top": ["Nasdaq-100 short swaps / futures", "Cash collateral", "US Treasury instruments", "(Inverse derivative-based)"]}, "SQQQ": {"desc": "ProShares UltraPro Short QQQ. Seeks −3× daily return of Nasdaq-100. Extreme inverse leverage.", "top": ["Nasdaq-100 short swaps / futures", "Cash collateral", "US Treasury instruments", "(Inverse derivative-based)"]}, "TLT": {"desc": "iShares 20+ Year Treasury Bond ETF. Long-duration US government bonds. Very sensitive to interest rate changes.", "top": ["US Treasury 2.875% 2052", "US Treasury 1.875% 2051", "US Treasury 2.25% 2052", "US Treasury 3.625% 2053", "(All US Treasuries ≥20 yr maturity)"]}, "IEF": {"desc": "iShares 7-10 Year Treasury Bond ETF. Medium-duration Treasuries. Moderate interest rate sensitivity.", "top": ["US Treasury 2.75% 2032", "US Treasury 1.5% 2031", "US Treasury 3.875% 2031", "(All US Treasuries 7-10 yr maturity)"]}, "SHY": {"desc": "iShares 1-3 Year Treasury Bond ETF. Short-duration Treasuries. Low rate risk, near-cash substitute.", "top": ["US Treasury 4.5% 2026", "US Treasury 4.375% 2025", "US Treasury 4.25% 2026", "(All US Treasuries 1-3 yr maturity)"]}, "BIL": {"desc": "SPDR Bloomberg 1-3 Month T-Bill ETF. Ultra-short Treasury bills tracking the risk-free rate closely.", "top": ["US Treasury Bills (1-3 month maturity)", "Rolling T-bill portfolio", "(Near-cash / money market equivalent)"]}, "LQD": {"desc": "iShares iBoxx $ Investment Grade Corporate Bond ETF. Broad USD investment-grade corporate bonds.", "top": ["JPMorgan Chase bonds", "Bank of America bonds", "Goldman Sachs bonds", "Apple bonds", "AT&T bonds"]}, "AGG": {"desc": "iShares Core US Aggregate Bond ETF. Broad US bond market: Treasuries, mortgage-backed, and IG corporate.", "top": ["US Treasuries (~43%)", "Mortgage-backed securities (~27%)", "Corporate bonds (~25%)", "Agency bonds", "ABS / CMBS"]}, "BND": {"desc": "Vanguard Total Bond Market ETF. Diversified across the entire US taxable bond market — 10,000+ holdings.", "top": ["US Treasuries", "Mortgage-backed securities", "IG Corporate bonds", "Agency bonds", "(Broad market — 10,000+ bonds)"]}, "HYG": {"desc": "iShares iBoxx $ High Yield Corporate Bond ETF. Sub-investment-grade (junk) bonds. Higher yield, higher default risk.", "top": ["Diversified across 1,200+ HY issuers", "BB-rated (~50%), B-rated (~35%)", "Telecom, energy, healthcare sectors", "(No single issuer >3%)"]}, "JNK": {"desc": "SPDR Bloomberg High Yield Bond ETF. Tracks the Bloomberg US High Yield index. Similar profile to HYG.", "top": ["Diversified high-yield corporate bonds", "BB and B rated issuers", "Energy, healthcare, tech issuers", "(Broad HY market exposure)"]}, "SGOV": {"desc": "iShares 0-3 Month Treasury Bill ETF. Near-zero duration, very stable NAV. Equivalent to holding cash at the risk-free rate.", "top": ["US Treasury Bills (0-3 month)", "Rolling T-bill portfolio", "(Cash equivalent — risk-free rate)"]}, "GBIL": {"desc": "Goldman Sachs Access Treasury 0-1 Year ETF. Ultra-short Treasuries competitive with money market funds.", "top": ["US Treasury Bills and short-term notes", "0-12 month maturities", "(Cash-equivalent, very low duration risk)"]}};
+function showEtf(t){
+  var d=ETF_INFO[t];if(!d)return;
+  document.getElementById('etfModalTitle').textContent=t;
+  document.getElementById('etfModalDesc').textContent=d.desc;
+  var h=document.getElementById('etfModalHoldings');
+  if(d.top&&d.top.length){h.innerHTML='<strong style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Top Holdings</strong><ul>'+d.top.map(function(x){return'<li>'+x+'</li>';}).join('')+'</ul>';}else{h.innerHTML='';}
+  document.getElementById('etfOverlay').classList.add('open');
+}
+function closeEtf(){document.getElementById('etfOverlay').classList.remove('open');}
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeEtf();});
+</script>
 
 <!-- TOP BAR -->
 <div class="topbar">
   <div>
     <div class="topbar-logo">University of San Diego - Knauss</div>
     <div class="topbar-title">FINA 402 - Investment Strategy Project &mdash; Market Dashboard</div>
+    <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:2px">Luis Ceballos, PhD</div>
   </div>
   <div class="topbar-meta">
     <strong>Fall 2026</strong><br>
@@ -126,6 +159,7 @@ canvas{max-width:100%}
 <!-- TAB NAV -->
 <div class="tab-bar">
   <button class="tab-btn active" onclick="showPage('dashboard',this)">📊 Dashboard</button>
+  <button class="tab-btn" onclick="showPage('holdings',this)">📋 Holdings</button>
   <button class="tab-btn" onclick="showPage('settings',this)">⚙️ Settings</button>
 </div>
 
@@ -142,8 +176,8 @@ canvas{max-width:100%}
         <td style="text-align:right;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums" class='neg'>-0.46%</td>
       </tr>
       <tr>
-        <td style="font-size:10.5px;color:var(--muted);padding:3px 0">Last 7 Days</td>
-        <td style="text-align:right;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums" class='neg'>-0.36%</td>
+        <td style="font-size:10.5px;color:var(--muted);padding:3px 0">Last 5 Days</td>
+        <td style="text-align:right;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums" class='neg'>-1.01%</td>
       </tr>
       <tr>
         <td style="font-size:10.5px;color:var(--muted);padding:3px 0">Since Sep 4</td>
@@ -159,8 +193,8 @@ canvas{max-width:100%}
         <td style="text-align:right;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums" class='neg'>-0.46%</td>
       </tr>
       <tr>
-        <td style="font-size:10.5px;color:var(--muted);padding:3px 0">Last 7 Days</td>
-        <td style="text-align:right;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums" class='neg'>-1.39%</td>
+        <td style="font-size:10.5px;color:var(--muted);padding:3px 0">Last 5 Days</td>
+        <td style="text-align:right;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums" class='neg'>-1.01%</td>
       </tr>
       <tr>
         <td style="font-size:10.5px;color:var(--muted);padding:3px 0">Since Sep 4</td>
@@ -182,7 +216,7 @@ canvas{max-width:100%}
       <!-- section buttons injected by JS -->
     </div>
   </div>
-  <canvas id="perfChart" height="160"></canvas>
+  <canvas id="perfChart" height="112"></canvas>
   <p style="font-size:10px;color:var(--muted);margin-top:8px">
     Each line = one team. Thick dashed = S&amp;P 500. Gold = AI Benchmark.
     Colored by section. Teams compete against the AI benchmark.
@@ -237,9 +271,45 @@ canvas{max-width:100%}
 <div class="section-title">Current Portfolio Allocations — Rebalancing Reference</div>
 <div class="card">
   <div class="card-title">Active allocations &amp; next rebalancing deadline — submit changes by each Friday open</div>
-<div style='font-size:12px;padding:10px 14px;border-radius:7px;margin-bottom:6px;background:var(--tag);border:1px solid var(--border);color:var(--muted)'>📅 Deadline: <strong>Sep 16, 2026 (Thursday)</strong> — 6 days away — submit <strong>Week 2</strong> allocation by market close. New portfolio starts Friday Sep 17.</div>
-<div style='font-size:10.5px;color:var(--muted);padding:6px 14px 10px;border-radius:6px;background:var(--tag);margin-bottom:14px;line-height:1.8'>📆 Upcoming deadlines: <strong>W2</strong> submit by Sep 16 → starts Sep 17 &nbsp;|&nbsp; <strong>W3</strong> submit by Sep 23 → starts Sep 24 &nbsp;|&nbsp; <strong>W4</strong> submit by Sep 30 → starts Oct 01 &nbsp;|&nbsp; <strong>W5</strong> submit by Oct 07 → starts Oct 08</div>
-<div style='margin-bottom:14px'><div style='font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px'>🤖 AI Benchmark — Week 1 active</div><div style='overflow-x:auto'><table class='etf-table' style='max-width:360px'><tbody><tr><td class='tk'>SPY</td><td style='width:100%;padding:4px 8px'><div style='display:flex;align-items:center;gap:6px'><div style='height:10px;width:100%;min-width:4px;max-width:100%;background:var(--navy);border-radius:3px;opacity:.75'></div><span style='font-size:11px;font-variant-numeric:tabular-nums;font-weight:600'>100.0%</span></div></td></tr></tbody></table></div></div>
+<div id='deadline-banner' style='font-size:12px;padding:10px 14px;border-radius:7px;margin-bottom:6px;background:var(--tag);border:1px solid var(--border);color:var(--muted)'>Loading deadline…</div>
+<div id='deadline-schedule' style='font-size:10.5px;color:var(--muted);padding:6px 14px 10px;border-radius:6px;background:var(--tag);margin-bottom:14px;line-height:1.8'>📆 Upcoming deadlines: …</div>
+<script>(function(){
+var FF=new Date('2026-09-04T00:00:00');
+function addD(d,n){var r=new Date(d);r.setDate(r.getDate()+n);return r;}
+function fmt(d,yr){var o={month:'short',day:'numeric',timeZone:'UTC'};if(yr)o.year='numeric';return d.toLocaleDateString('en-US',o);}
+var today=new Date();today.setHours(0,0,0,0);
+var diff=Math.floor((today-FF)/86400000);
+var cw=Math.floor(diff/7);
+var nWk=cw+1;
+var nFri=addD(FF,nWk*7),nThu=addD(nFri,-1);
+var dl=Math.floor((nThu-today)/86400000);
+if(dl<0){nWk++;nFri=addD(FF,nWk*7);nThu=addD(nFri,-1);dl=Math.floor((nThu-today)/86400000);}
+var dispWk=nWk+1;
+var bTxt,bBg;
+function fmtWeek(mon,thu){
+var mStr=mon.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
+var tDay=thu.toLocaleDateString('en-US',{day:'numeric',timeZone:'UTC'});
+var mMo=mon.toLocaleDateString('en-US',{month:'short',timeZone:'UTC'});
+var tMo=thu.toLocaleDateString('en-US',{month:'short',timeZone:'UTC'});
+return mMo===tMo?mStr+'-'+tDay:mStr+' – '+tMo+' '+tDay;}
+var weekMon=addD(nThu,-3);
+var weekRange=fmtWeek(weekMon,nThu);
+var bTxt,bBg;
+if(dl===0){
+bTxt='🔴 Deadline: <strong>Week of '+weekRange+' (TODAY)</strong> — submit <strong>Week '+dispWk+'</strong> allocation by end of 2nd lecture today. New allocation will be applied to portfolio starting Friday '+fmt(nFri)+'.';
+bBg='background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.3);color:#DC2626';}
+else{
+bTxt='🟡 Deadline: <strong>Week of '+weekRange+'</strong> — submit <strong>Week '+dispWk+'</strong> allocation by end of 2nd lecture of the week. New allocation will be applied to portfolio starting Friday '+fmt(nFri)+'.';
+bBg='background:rgba(217,119,6,.1);border:1px solid rgba(217,119,6,.3);color:#92400E';}
+var uStart=nWk+1;
+var items=[];
+for(var i=0;i<4;i++){var wk=uStart+i,fri=addD(FF,wk*7),thu=addD(fri,-1),mon=addD(thu,-3);items.push('<strong>W'+(wk+1)+'</strong> Week of '+fmtWeek(mon,thu)+' → starts '+fmt(fri));}
+var b=document.getElementById('deadline-banner');
+var s=document.getElementById('deadline-schedule');
+if(b){b.style.cssText='font-size:12px;padding:10px 14px;border-radius:7px;margin-bottom:6px;'+bBg;b.innerHTML=bTxt;}
+if(s){s.innerHTML='📆 Upcoming deadlines: '+items.join(' &nbsp;|&nbsp; ');}
+})()</script>
+<div style='margin-bottom:14px'><div style='font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px'>🤖 AI Benchmark — Week 0 — Default (100% SPY)</div><div style='overflow-x:auto'><table class='etf-table' style='max-width:360px'><tbody><tr><td class='tk'>SPY</td><td style='width:100%;padding:4px 8px'><div style='display:flex;align-items:center;gap:6px'><div style='height:10px;width:100%;min-width:4px;max-width:100%;background:var(--navy);border-radius:3px;opacity:.75'></div><span style='font-size:11px;font-variant-numeric:tabular-nums;font-weight:600'>100.0%</span></div></td></tr></tbody></table></div></div>
 <div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px'>
 <div><div style='font-size:11px;font-weight:700;color:#2563EB;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid #2563EB22'>Section 1</div><div style='margin-bottom:10px'><div style='display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px'><span style='font-size:12px;font-weight:700;color:var(--text)'>S1-T01</span><span style='font-size:10px;color:var(--muted)'>Wk 0 — SPY default</span></div><table class='etf-table'><tbody><tr><td class='tk'>SPY</td><td style='width:100%;padding:4px 8px'><div style='display:flex;align-items:center;gap:6px'><div style='height:10px;width:100%;min-width:4px;max-width:100%;background:var(--navy);border-radius:3px;opacity:.75'></div><span style='font-size:11px;font-variant-numeric:tabular-nums;font-weight:600'>100.0%</span></div></td></tr></tbody></table></div>
 <div style='margin-bottom:10px'><div style='display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px'><span style='font-size:12px;font-weight:700;color:var(--text)'>S1-T02</span><span style='font-size:10px;color:var(--muted)'>Wk 0 — SPY default</span></div><table class='etf-table'><tbody><tr><td class='tk'>SPY</td><td style='width:100%;padding:4px 8px'><div style='display:flex;align-items:center;gap:6px'><div style='height:10px;width:100%;min-width:4px;max-width:100%;background:var(--navy);border-radius:3px;opacity:.75'></div><span style='font-size:11px;font-variant-numeric:tabular-nums;font-weight:600'>100.0%</span></div></td></tr></tbody></table></div>
@@ -316,7 +386,7 @@ canvas{max-width:100%}
     <canvas id="sectorChart" height="200"></canvas>
   </div>
   <div id="sec-sectorintra-card" class="card" style="margin-bottom:0">
-    <div class="card-title">S&amp;P 500 &amp; Sectors &mdash; Last 7 Days Intraday (Indexed to 100)</div>
+    <div class="card-title">S&amp;P 500 &amp; Sectors &mdash; Last 5 Days Intraday (Indexed to 100)</div>
     <canvas id="intraChart" height="200"></canvas>
   </div>
 </div>
@@ -341,52 +411,52 @@ canvas{max-width:100%}
     <thead>
       <tr>
         <th>Ticker</th><th>Description</th><th>Last Price</th>
-        <th>7-Day</th><th>YTD 2026</th><th>2-Year</th>
+        <th>5-Day</th><th>YTD 2026</th><th>2-Year</th>
       </tr>
     </thead>
     <tbody>
 <tr class='cat-header'><td colspan='6'>Broad Market</td></tr>
-<tr><td class='tk'>SPY</td><td>SPDR S&P 500 ETF</td><td class='num'>$762.40</td><td class='num neg'>-0.36%</td><td class='num pos'>+12.19%</td><td class='num pos'>+42.83%</td></tr>
-<tr><td class='tk'>QQQ</td><td>Invesco Nasdaq-100 ETF</td><td class='num'>$716.31</td><td class='num pos'>+1.00%</td><td class='num pos'>+17.11%</td><td class='num pos'>+59.27%</td></tr>
-<tr><td class='tk'>IWM</td><td>iShares Russell 2000</td><td class='num'>$290.64</td><td class='num neg'>-1.15%</td><td class='num pos'>+17.31%</td><td class='num pos'>+42.47%</td></tr>
-<tr><td class='tk'>DIA</td><td>SPDR Dow Jones 30</td><td class='num'>$524.07</td><td class='num neg'>-1.23%</td><td class='num pos'>+9.29%</td><td class='num pos'>+32.14%</td></tr>
+<tr><td class='tk'>SPY <button class="etfi" onclick="showEtf('SPY')">&#x2139;</button></td><td>SPDR S&P 500 ETF</td><td class='num'>$762.40</td><td class='num neg'>-0.36%</td><td class='num pos'>+12.19%</td><td class='num pos'>+42.83%</td></tr>
+<tr><td class='tk'>QQQ <button class="etfi" onclick="showEtf('QQQ')">&#x2139;</button></td><td>Invesco Nasdaq-100 ETF</td><td class='num'>$716.31</td><td class='num pos'>+1.00%</td><td class='num pos'>+17.11%</td><td class='num pos'>+59.27%</td></tr>
+<tr><td class='tk'>IWM <button class="etfi" onclick="showEtf('IWM')">&#x2139;</button></td><td>iShares Russell 2000</td><td class='num'>$290.64</td><td class='num neg'>-1.15%</td><td class='num pos'>+17.31%</td><td class='num pos'>+42.47%</td></tr>
+<tr><td class='tk'>DIA <button class="etfi" onclick="showEtf('DIA')">&#x2139;</button></td><td>SPDR Dow Jones 30</td><td class='num'>$524.07</td><td class='num neg'>-1.23%</td><td class='num pos'>+9.29%</td><td class='num pos'>+32.14%</td></tr>
 <tr class='cat-header'><td colspan='6'>Sectors (SPDR)</td></tr>
-<tr><td class='tk'>XLK</td><td>Technology</td><td class='num'>$187.87</td><td class='num pos'>+2.33%</td><td class='num pos'>+30.51%</td><td class='num pos'>+83.49%</td></tr>
-<tr><td class='tk'>XLF</td><td>Financials</td><td class='num'>$57.06</td><td class='num neg'>-1.04%</td><td class='num pos'>+4.78%</td><td class='num pos'>+30.85%</td></tr>
-<tr><td class='tk'>XLE</td><td>Energy</td><td class='num'>$65.31</td><td class='num pos'>+0.32%</td><td class='num pos'>+45.04%</td><td class='num pos'>+60.61%</td></tr>
-<tr><td class='tk'>XLV</td><td>Health Care</td><td class='num'>$166.58</td><td class='num neg'>-3.68%</td><td class='num pos'>+8.03%</td><td class='num pos'>+11.19%</td></tr>
-<tr><td class='tk'>XLY</td><td>Consumer Discret.</td><td class='num'>$112.46</td><td class='num neg'>-2.09%</td><td class='num neg'>-4.60%</td><td class='num pos'>+23.57%</td></tr>
-<tr><td class='tk'>XLP</td><td>Consumer Staples</td><td class='num'>$83.05</td><td class='num neg'>-2.90%</td><td class='num pos'>+8.25%</td><td class='num pos'>+4.64%</td></tr>
-<tr><td class='tk'>XLU</td><td>Utilities</td><td class='num'>$42.94</td><td class='num pos'>+0.63%</td><td class='num pos'>+0.78%</td><td class='num pos'>+18.51%</td></tr>
-<tr><td class='tk'>XLB</td><td>Materials</td><td class='num'>$51.39</td><td class='num neg'>-2.95%</td><td class='num pos'>+12.34%</td><td class='num pos'>+17.58%</td></tr>
-<tr><td class='tk'>XLI</td><td>Industrials</td><td class='num'>$171.79</td><td class='num neg'>-0.57%</td><td class='num pos'>+9.32%</td><td class='num pos'>+38.10%</td></tr>
-<tr><td class='tk'>XLRE</td><td>Real Estate</td><td class='num'>$43.41</td><td class='num neg'>-0.73%</td><td class='num pos'>+9.17%</td><td class='num pos'>+5.13%</td></tr>
-<tr><td class='tk'>XLC</td><td>Comm. Services</td><td class='num'>$110.83</td><td class='num neg'>-1.41%</td><td class='num neg'>-4.64%</td><td class='num pos'>+34.87%</td></tr>
+<tr><td class='tk'>XLK <button class="etfi" onclick="showEtf('XLK')">&#x2139;</button></td><td>Technology</td><td class='num'>$187.87</td><td class='num pos'>+2.33%</td><td class='num pos'>+30.51%</td><td class='num pos'>+83.49%</td></tr>
+<tr><td class='tk'>XLF <button class="etfi" onclick="showEtf('XLF')">&#x2139;</button></td><td>Financials</td><td class='num'>$57.06</td><td class='num neg'>-1.04%</td><td class='num pos'>+4.78%</td><td class='num pos'>+30.85%</td></tr>
+<tr><td class='tk'>XLE <button class="etfi" onclick="showEtf('XLE')">&#x2139;</button></td><td>Energy</td><td class='num'>$65.31</td><td class='num pos'>+0.32%</td><td class='num pos'>+45.04%</td><td class='num pos'>+60.61%</td></tr>
+<tr><td class='tk'>XLV <button class="etfi" onclick="showEtf('XLV')">&#x2139;</button></td><td>Health Care</td><td class='num'>$166.58</td><td class='num neg'>-3.68%</td><td class='num pos'>+8.03%</td><td class='num pos'>+11.19%</td></tr>
+<tr><td class='tk'>XLY <button class="etfi" onclick="showEtf('XLY')">&#x2139;</button></td><td>Consumer Discret.</td><td class='num'>$112.46</td><td class='num neg'>-2.09%</td><td class='num neg'>-4.60%</td><td class='num pos'>+23.57%</td></tr>
+<tr><td class='tk'>XLP <button class="etfi" onclick="showEtf('XLP')">&#x2139;</button></td><td>Consumer Staples</td><td class='num'>$83.05</td><td class='num neg'>-2.90%</td><td class='num pos'>+8.25%</td><td class='num pos'>+4.64%</td></tr>
+<tr><td class='tk'>XLU <button class="etfi" onclick="showEtf('XLU')">&#x2139;</button></td><td>Utilities</td><td class='num'>$42.94</td><td class='num pos'>+0.63%</td><td class='num pos'>+0.78%</td><td class='num pos'>+18.51%</td></tr>
+<tr><td class='tk'>XLB <button class="etfi" onclick="showEtf('XLB')">&#x2139;</button></td><td>Materials</td><td class='num'>$51.39</td><td class='num neg'>-2.95%</td><td class='num pos'>+12.34%</td><td class='num pos'>+17.58%</td></tr>
+<tr><td class='tk'>XLI <button class="etfi" onclick="showEtf('XLI')">&#x2139;</button></td><td>Industrials</td><td class='num'>$171.79</td><td class='num neg'>-0.57%</td><td class='num pos'>+9.32%</td><td class='num pos'>+38.10%</td></tr>
+<tr><td class='tk'>XLRE <button class="etfi" onclick="showEtf('XLRE')">&#x2139;</button></td><td>Real Estate</td><td class='num'>$43.41</td><td class='num neg'>-0.73%</td><td class='num pos'>+9.17%</td><td class='num pos'>+5.13%</td></tr>
+<tr><td class='tk'>XLC <button class="etfi" onclick="showEtf('XLC')">&#x2139;</button></td><td>Comm. Services</td><td class='num'>$110.83</td><td class='num neg'>-1.41%</td><td class='num neg'>-4.64%</td><td class='num pos'>+34.87%</td></tr>
 <tr class='cat-header'><td colspan='6'>Leveraged</td></tr>
-<tr><td class='tk'>SSO</td><td>ProShares 2x S&P 500</td><td class='num'>$69.35</td><td class='num neg'>-0.83%</td><td class='num pos'>+19.86%</td><td class='num pos'>+72.55%</td></tr>
-<tr><td class='tk'>UPRO</td><td>ProShares 3x S&P 500</td><td class='num'>$147.19</td><td class='num neg'>-1.31%</td><td class='num pos'>+27.09%</td><td class='num pos'>+101.53%</td></tr>
-<tr><td class='tk'>QLD</td><td>ProShares 2x Nasdaq-100</td><td class='num'>$89.98</td><td class='num pos'>+1.89%</td><td class='num pos'>+28.47%</td><td class='num pos'>+106.29%</td></tr>
-<tr><td class='tk'>TQQQ</td><td>ProShares 3x Nasdaq-100</td><td class='num'>$71.55</td><td class='num pos'>+2.80%</td><td class='num pos'>+37.22%</td><td class='num pos'>+146.67%</td></tr>
+<tr><td class='tk'>SSO <button class="etfi" onclick="showEtf('SSO')">&#x2139;</button></td><td>ProShares 2x S&P 500</td><td class='num'>$69.35</td><td class='num neg'>-0.83%</td><td class='num pos'>+19.86%</td><td class='num pos'>+72.55%</td></tr>
+<tr><td class='tk'>UPRO <button class="etfi" onclick="showEtf('UPRO')">&#x2139;</button></td><td>ProShares 3x S&P 500</td><td class='num'>$147.19</td><td class='num neg'>-1.31%</td><td class='num pos'>+27.09%</td><td class='num pos'>+101.53%</td></tr>
+<tr><td class='tk'>QLD <button class="etfi" onclick="showEtf('QLD')">&#x2139;</button></td><td>ProShares 2x Nasdaq-100</td><td class='num'>$89.98</td><td class='num pos'>+1.89%</td><td class='num pos'>+28.47%</td><td class='num pos'>+106.29%</td></tr>
+<tr><td class='tk'>TQQQ <button class="etfi" onclick="showEtf('TQQQ')">&#x2139;</button></td><td>ProShares 3x Nasdaq-100</td><td class='num'>$71.55</td><td class='num pos'>+2.80%</td><td class='num pos'>+37.22%</td><td class='num pos'>+146.67%</td></tr>
 <tr class='cat-header'><td colspan='6'>Inverse</td></tr>
-<tr><td class='tk'>SH</td><td>ProShares Short S&P 500 (-1x)</td><td class='num'>$32.68</td><td class='num pos'>+0.43%</td><td class='num neg'>-7.90%</td><td class='num neg'>-22.74%</td></tr>
-<tr><td class='tk'>SDS</td><td>UltraShort S&P 500 (-2x)</td><td class='num'>$55.25</td><td class='num pos'>+0.86%</td><td class='num neg'>-17.81%</td><td class='num neg'>-47.02%</td></tr>
-<tr><td class='tk'>PSQ</td><td>ProShares Short Nasdaq (-1x)</td><td class='num'>$25.87</td><td class='num neg'>-0.92%</td><td class='num neg'>-13.36%</td><td class='num neg'>-33.80%</td></tr>
-<tr><td class='tk'>SQQQ</td><td>UltraPro Short QQQ (-3x)</td><td class='num'>$38.64</td><td class='num neg'>-2.69%</td><td class='num neg'>-42.62%</td><td class='num neg'>-81.09%</td></tr>
+<tr><td class='tk'>SH <button class="etfi" onclick="showEtf('SH')">&#x2139;</button></td><td>ProShares Short S&P 500 (-1x)</td><td class='num'>$32.68</td><td class='num pos'>+0.43%</td><td class='num neg'>-7.90%</td><td class='num neg'>-22.74%</td></tr>
+<tr><td class='tk'>SDS <button class="etfi" onclick="showEtf('SDS')">&#x2139;</button></td><td>UltraShort S&P 500 (-2x)</td><td class='num'>$55.25</td><td class='num pos'>+0.86%</td><td class='num neg'>-17.81%</td><td class='num neg'>-47.02%</td></tr>
+<tr><td class='tk'>PSQ <button class="etfi" onclick="showEtf('PSQ')">&#x2139;</button></td><td>ProShares Short Nasdaq (-1x)</td><td class='num'>$25.87</td><td class='num neg'>-0.92%</td><td class='num neg'>-13.36%</td><td class='num neg'>-33.80%</td></tr>
+<tr><td class='tk'>SQQQ <button class="etfi" onclick="showEtf('SQQQ')">&#x2139;</button></td><td>UltraPro Short QQQ (-3x)</td><td class='num'>$38.64</td><td class='num neg'>-2.69%</td><td class='num neg'>-42.62%</td><td class='num neg'>-81.09%</td></tr>
 <tr class='cat-header'><td colspan='6'>Bonds Gov</td></tr>
-<tr><td class='tk'>TLT</td><td>iShares 20+ Year Treasury</td><td class='num'>$81.73</td><td class='num neg'>-0.27%</td><td class='num neg'>-3.20%</td><td class='num neg'>-10.77%</td></tr>
-<tr><td class='tk'>IEF</td><td>iShares 7-10 Year Treasury</td><td class='num'>$91.90</td><td class='num neg'>-0.30%</td><td class='num neg'>-1.79%</td><td class='num pos'>+0.74%</td></tr>
-<tr><td class='tk'>SHY</td><td>iShares 1-3 Year Treasury</td><td class='num'>$81.63</td><td class='num neg'>-0.01%</td><td class='num pos'>+0.86%</td><td class='num pos'>+6.05%</td></tr>
-<tr><td class='tk'>BIL</td><td>SPDR 1-3 Month T-Bill</td><td class='num'>$91.46</td><td class='num pos'>+0.07%</td><td class='num pos'>+2.41%</td><td class='num pos'>+8.29%</td></tr>
+<tr><td class='tk'>TLT <button class="etfi" onclick="showEtf('TLT')">&#x2139;</button></td><td>iShares 20+ Year Treasury</td><td class='num'>$81.73</td><td class='num neg'>-0.27%</td><td class='num neg'>-3.20%</td><td class='num neg'>-10.77%</td></tr>
+<tr><td class='tk'>IEF <button class="etfi" onclick="showEtf('IEF')">&#x2139;</button></td><td>iShares 7-10 Year Treasury</td><td class='num'>$91.90</td><td class='num neg'>-0.30%</td><td class='num neg'>-1.79%</td><td class='num pos'>+0.74%</td></tr>
+<tr><td class='tk'>SHY <button class="etfi" onclick="showEtf('SHY')">&#x2139;</button></td><td>iShares 1-3 Year Treasury</td><td class='num'>$81.63</td><td class='num neg'>-0.01%</td><td class='num pos'>+0.86%</td><td class='num pos'>+6.05%</td></tr>
+<tr><td class='tk'>BIL <button class="etfi" onclick="showEtf('BIL')">&#x2139;</button></td><td>SPDR 1-3 Month T-Bill</td><td class='num'>$91.46</td><td class='num pos'>+0.07%</td><td class='num pos'>+2.41%</td><td class='num pos'>+8.29%</td></tr>
 <tr class='cat-header'><td colspan='6'>Bonds Corp IG</td></tr>
-<tr><td class='tk'>LQD</td><td>iShares IG Corporate Bond</td><td class='num'>$105.31</td><td class='num neg'>-0.04%</td><td class='num neg'>-1.40%</td><td class='num pos'>+2.38%</td></tr>
-<tr><td class='tk'>AGG</td><td>iShares US Aggregate Bond</td><td class='num'>$96.68</td><td class='num neg'>-0.17%</td><td class='num neg'>-0.55%</td><td class='num pos'>+3.19%</td></tr>
-<tr><td class='tk'>BND</td><td>Vanguard Total Bond Market</td><td class='num'>$71.73</td><td class='num neg'>-0.14%</td><td class='num neg'>-0.49%</td><td class='num pos'>+3.18%</td></tr>
+<tr><td class='tk'>LQD <button class="etfi" onclick="showEtf('LQD')">&#x2139;</button></td><td>iShares IG Corporate Bond</td><td class='num'>$105.31</td><td class='num neg'>-0.04%</td><td class='num neg'>-1.40%</td><td class='num pos'>+2.38%</td></tr>
+<tr><td class='tk'>AGG <button class="etfi" onclick="showEtf('AGG')">&#x2139;</button></td><td>iShares US Aggregate Bond</td><td class='num'>$96.68</td><td class='num neg'>-0.17%</td><td class='num neg'>-0.55%</td><td class='num pos'>+3.19%</td></tr>
+<tr><td class='tk'>BND <button class="etfi" onclick="showEtf('BND')">&#x2139;</button></td><td>Vanguard Total Bond Market</td><td class='num'>$71.73</td><td class='num neg'>-0.14%</td><td class='num neg'>-0.49%</td><td class='num pos'>+3.18%</td></tr>
 <tr class='cat-header'><td colspan='6'>Bonds Corp HY</td></tr>
-<tr><td class='tk'>HYG</td><td>iShares High Yield Corp Bond</td><td class='num'>$78.98</td><td class='num neg'>-0.16%</td><td class='num pos'>+1.89%</td><td class='num pos'>+11.92%</td></tr>
-<tr><td class='tk'>JNK</td><td>SPDR Bloomberg HY Bond</td><td class='num'>$95.04</td><td class='num neg'>-0.18%</td><td class='num pos'>+2.15%</td><td class='num pos'>+12.13%</td></tr>
+<tr><td class='tk'>HYG <button class="etfi" onclick="showEtf('HYG')">&#x2139;</button></td><td>iShares High Yield Corp Bond</td><td class='num'>$78.98</td><td class='num neg'>-0.16%</td><td class='num pos'>+1.89%</td><td class='num pos'>+11.92%</td></tr>
+<tr><td class='tk'>JNK <button class="etfi" onclick="showEtf('JNK')">&#x2139;</button></td><td>SPDR Bloomberg HY Bond</td><td class='num'>$95.04</td><td class='num neg'>-0.18%</td><td class='num pos'>+2.15%</td><td class='num pos'>+12.13%</td></tr>
 <tr class='cat-header'><td colspan='6'>Cash</td></tr>
-<tr><td class='tk'>SGOV</td><td>iShares 0-3 Month Treasury</td><td class='num'>$100.49</td><td class='num pos'>+0.07%</td><td class='num pos'>+2.48%</td><td class='num pos'>+8.45%</td></tr>
-<tr><td class='tk'>GBIL</td><td>Goldman Sachs 0-1 Yr Treasury</td><td class='num'>$99.95</td><td class='num pos'>+0.06%</td><td class='num pos'>+2.35%</td><td class='num pos'>+8.22%</td></tr>
+<tr><td class='tk'>SGOV <button class="etfi" onclick="showEtf('SGOV')">&#x2139;</button></td><td>iShares 0-3 Month Treasury</td><td class='num'>$100.49</td><td class='num pos'>+0.07%</td><td class='num pos'>+2.48%</td><td class='num pos'>+8.45%</td></tr>
+<tr><td class='tk'>GBIL <button class="etfi" onclick="showEtf('GBIL')">&#x2139;</button></td><td>Goldman Sachs 0-1 Yr Treasury</td><td class='num'>$99.95</td><td class='num pos'>+0.06%</td><td class='num pos'>+2.35%</td><td class='num pos'>+8.22%</td></tr>
     </tbody>
   </table>
   </div>
@@ -416,6 +486,44 @@ canvas{max-width:100%}
 <div class="footer">FINA 402 - Investment Strategy Project &middot; University of San Diego - Knauss &middot; Fall 2026 &middot; Data: Yahoo Finance</div>
 
 </div><!-- end page-dashboard -->
+
+<!-- ═══ HOLDINGS PAGE ═══ -->
+<div id="page-holdings" class="page">
+  <div id="holdings-loading" style="text-align:center;padding:48px 20px;color:var(--muted)">
+    <div style="font-size:28px;margin-bottom:8px">⏳</div>
+    <div style="font-size:13px">Loading submissions from Firebase…</div>
+  </div>
+  <div id="holdings-error" style="display:none;text-align:center;padding:32px 20px;color:var(--red);font-size:13px"></div>
+  <div id="holdings-content" style="display:none">
+    <style>@media(max-width:640px){#h-chart-row{grid-template-columns:1fr!important}}</style>
+    <div class="tiles" id="h-stats" style="grid-template-columns:repeat(4,1fr)"></div>
+    <div id="h-chart-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div class="card">
+        <div class="card-title">Average Allocation by ETF</div>
+        <div style="position:relative;height:260px"><canvas id="h-avg-chart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Section Comparison — Top 5 ETFs</div>
+        <div style="position:relative;height:260px"><canvas id="h-sec-chart"></canvas></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title">Section × ETF Heatmap &nbsp;·&nbsp; <span style="font-size:10px;text-transform:none;letter-spacing:0;color:var(--muted)">average allocation %</span></div>
+      <div style="overflow-x:auto" id="h-heatmap"></div>
+    </div>
+    <div class="section-title">Team Breakdown</div>
+    <div class="card" style="margin-bottom:12px"><div id="h-teams"></div></div>
+    <div class="section-title">Investment Rationale</div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title">Key Investment Themes</div>
+      <div id="h-themes" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px;margin-top:8px"></div>
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title">Top Keywords</div>
+      <div id="h-keywords" style="display:flex;flex-wrap:wrap;gap:7px;margin-top:10px"></div>
+    </div>
+  </div>
+</div><!-- end page-holdings -->
 
 <!-- ═══ SETTINGS PAGE ═══ -->
 <div id="page-settings" class="page">
@@ -469,8 +577,8 @@ canvas{max-width:100%}
       <label class="toggle"><input type="checkbox" id="tog-sector1y" checked onchange="applySettings()"><span class="toggle-slider"></span></label>
     </div>
     <div class="settings-row">
-      <div><div class="settings-row-label">Sector Intraday — 7 Days</div>
-           <div class="settings-row-desc">Hourly prices for the last 7 trading days</div></div>
+      <div><div class="settings-row-label">Sector Intraday — 5 Days</div>
+           <div class="settings-row-desc">Hourly prices for the last 5 trading days</div></div>
       <label class="toggle"><input type="checkbox" id="tog-sectorintra" checked onchange="applySettings()"><span class="toggle-slider"></span></label>
     </div>
     <div class="settings-row">
@@ -480,13 +588,32 @@ canvas{max-width:100%}
     </div>
     <div class="settings-row">
       <div><div class="settings-row-label">ETF Returns Table</div>
-           <div class="settings-row-desc">Full ETF universe with 7-day, YTD &amp; 2-year returns</div></div>
+           <div class="settings-row-desc">Full ETF universe with 5-day, YTD &amp; 2-year returns</div></div>
       <label class="toggle"><input type="checkbox" id="tog-etftable" checked onchange="applySettings()"><span class="toggle-slider"></span></label>
     </div>
     <div class="settings-row">
       <div><div class="settings-row-label">Market News</div>
            <div class="settings-row-desc">Top 10 headlines from the last 7 days</div></div>
       <label class="toggle"><input type="checkbox" id="tog-news" checked onchange="applySettings()"><span class="toggle-slider"></span></label>
+    </div>
+  </div>
+
+  <!-- Holdings Week Selector -->
+  <div class="settings-card">
+    <div class="settings-card-title">📋 Holdings Report</div>
+    <div class="settings-row">
+      <div>
+        <div class="settings-row-label">Default Week</div>
+        <div class="settings-row-desc">Which week's submissions to show in the Holdings tab</div>
+      </div>
+      <select id="holdings-week-sel" onchange="setHoldingsWeek(this.value)"
+              style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:13px;cursor:pointer">
+        <option value="1">Week 1</option>
+        <option value="2" selected>Week 2</option>
+        <option value="3">Week 3</option>
+        <option value="4">Week 4</option>
+        <option value="5">Week 5</option>
+      </select>
     </div>
   </div>
 
@@ -513,7 +640,7 @@ canvas{max-width:100%}
     </div>
     <div id="pw-change-msg"></div>
     <button class="btn bp-" onclick="changeSettingsPw()">Update Password</button>
-    <p style="font-size:10.5px;color:var(--muted);margin-top:8px">Password is stored in Firebase — changes apply on all devices immediately.</p>
+    <p style="font-size:10.5px;color:var(--muted);margin-top:8px">Password is saved in this browser. Use "Reset All Settings" below to restore defaults.</p>
   </div>
 
   <div class="settings-card">
@@ -607,18 +734,18 @@ new Chart(document.getElementById('sectorChart').getContext('2d'), {
 });
 new Chart(document.getElementById('intraChart').getContext('2d'), {
   type:'line',
-  data:{labels:["Tue 09/01 09AM", "Tue 09/01 10AM", "Tue 09/01 11AM", "Tue 09/01 12PM", "Tue 09/01 01PM", "Tue 09/01 02PM", "Tue 09/01 03PM", "Wed 09/02 09AM", "Wed 09/02 10AM", "Wed 09/02 11AM", "Wed 09/02 12PM", "Wed 09/02 01PM", "Wed 09/02 02PM", "Wed 09/02 03PM", "Thu 09/03 09AM", "Thu 09/03 10AM", "Thu 09/03 11AM", "Thu 09/03 12PM", "Thu 09/03 01PM", "Thu 09/03 02PM", "Thu 09/03 03PM", "Fri 09/04 09AM", "Fri 09/04 10AM", "Fri 09/04 11AM", "Fri 09/04 12PM", "Fri 09/04 01PM", "Fri 09/04 02PM", "Fri 09/04 03PM", "Tue 09/08 09AM", "Tue 09/08 10AM", "Tue 09/08 11AM", "Tue 09/08 12PM", "Tue 09/08 01PM", "Tue 09/08 02PM", "Tue 09/08 03PM", "Wed 09/09 09AM", "Wed 09/09 10AM", "Wed 09/09 11AM", "Wed 09/09 12PM", "Wed 09/09 01PM", "Wed 09/09 02PM", "Wed 09/09 03PM", "Thu 09/10 09AM", "Thu 09/10 10AM", "Thu 09/10 11AM", "Thu 09/10 12PM", "Thu 09/10 01PM", "Thu 09/10 02PM", "Thu 09/10 03PM"],datasets:[{label:"S&P 500",data:[100.0, 99.98, 99.84, 99.73, 99.66, 99.68, 99.73, 100.2, 100.33, 100.14, 100.12, 100.2, 100.22, 100.18, 100.64, 101.2, 101.13, 101.17, 101.3, 101.26, 101.22, 100.97, 100.74, 100.9, 100.8, 100.8, 100.82, 100.85, 100.38, 100.53, 100.44, 100.49, 100.52, 100.42, 100.29, 100.03, 99.71, 99.72, 99.89, 99.88, 99.91, 99.82, 99.34, 99.4, 99.26, 99.32, 99.2, 99.19, 99.23],borderColor:'#1E3A5F',borderWidth:2.5,borderDash:[6,3],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
-{label:"Technology",data:[100.0, 100.35, 100.23, 100.08, 99.89, 100.1, 100.07, 99.97, 100.1, 99.84, 99.86, 99.94, 100.04, 100.05, 100.5, 101.17, 101.16, 101.1, 101.42, 101.3, 101.35, 102.21, 101.77, 101.98, 101.88, 101.85, 101.72, 102.05, 102.36, 102.77, 102.41, 102.64, 102.61, 102.47, 102.36, 102.67, 102.11, 102.18, 102.38, 102.36, 102.38, 102.4, 101.18, 101.49, 101.05, 101.27, 101.0, 101.08, 100.92],borderColor:'#2563EB',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
-{label:"Financials",data:[100.0, 99.41, 99.16, 98.99, 98.99, 98.91, 98.86, 100.14, 99.93, 99.52, 99.47, 99.64, 99.77, 99.62, 100.35, 100.96, 100.95, 100.98, 100.99, 101.15, 101.16, 100.2, 100.18, 100.56, 100.53, 100.68, 100.46, 100.41, 99.39, 99.45, 99.47, 99.3, 99.49, 99.22, 99.02, 98.91, 98.72, 98.74, 98.95, 98.77, 98.8, 98.61, 98.31, 98.37, 98.26, 98.13, 98.11, 98.1, 98.29],borderColor:'#16A34A',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
-{label:"Energy",data:[100.0, 100.3, 100.19, 100.58, 100.52, 100.76, 100.86, 100.64, 100.94, 101.11, 101.19, 101.41, 101.7, 101.32, 101.6, 101.77, 101.46, 101.43, 100.96, 100.91, 100.63, 99.65, 99.81, 99.77, 99.92, 99.82, 99.73, 99.74, 101.5, 100.96, 100.68, 100.29, 101.0, 101.08, 100.85, 101.66, 101.74, 101.63, 101.71, 101.77, 101.93, 101.67, 100.56, 101.04, 101.39, 101.49, 101.49, 101.23, 101.1],borderColor:'#EA580C',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
-{label:"Health Care",data:[100.0, 99.86, 99.62, 99.65, 99.8, 99.65, 99.84, 100.8, 100.84, 100.52, 100.42, 100.68, 100.7, 100.61, 99.95, 100.47, 100.45, 100.73, 100.65, 100.67, 100.79, 99.78, 99.89, 99.98, 99.73, 99.65, 99.66, 99.72, 97.52, 97.15, 97.56, 97.65, 97.66, 97.55, 97.21, 96.88, 97.07, 96.91, 97.02, 97.01, 97.03, 96.88, 96.63, 96.45, 96.41, 96.44, 96.46, 96.38, 96.35],borderColor:'#7C3AED',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
-{label:"Cons. Discret.",data:[100.0, 99.71, 99.41, 99.33, 99.32, 99.19, 99.25, 99.66, 99.51, 99.4, 99.42, 99.37, 99.33, 99.5, 100.52, 101.13, 101.16, 101.23, 101.26, 101.08, 100.88, 99.4, 99.25, 99.42, 99.36, 99.52, 99.65, 99.52, 98.72, 99.02, 99.02, 98.86, 98.84, 98.85, 98.76, 97.89, 97.32, 97.32, 97.6, 97.73, 97.6, 97.42, 97.35, 97.32, 97.34, 97.24, 97.09, 96.9, 96.97],borderColor:'#DB2777',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
-{label:"Cons. Staples",data:[100.0, 99.62, 99.27, 99.3, 99.13, 98.97, 99.03, 99.03, 99.63, 99.85, 99.69, 99.86, 99.27, 99.32, 98.71, 99.22, 99.28, 99.34, 99.23, 99.08, 99.01, 98.72, 98.7, 98.65, 98.37, 98.35, 98.37, 98.24, 97.71, 97.35, 97.63, 97.57, 97.54, 97.78, 97.58, 96.54, 96.32, 96.56, 96.51, 96.66, 96.54, 96.45, 96.9, 96.75, 96.84, 96.69, 96.67, 96.54, 96.53],borderColor:'#0891B2',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
-{label:"Utilities",data:[100.0, 100.22, 100.0, 99.78, 99.88, 100.35, 100.47, 99.62, 100.24, 100.22, 100.39, 100.72, 100.63, 100.68, 101.16, 101.55, 101.64, 101.62, 101.4, 101.59, 101.51, 101.82, 101.79, 101.81, 101.31, 101.4, 101.65, 101.62, 102.73, 102.64, 102.73, 102.82, 102.96, 102.87, 102.55, 101.84, 101.36, 101.24, 101.25, 101.6, 101.55, 101.37, 101.46, 100.8, 100.77, 100.55, 100.7, 100.54, 100.39],borderColor:'#D97706',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
-{label:"Materials",data:[100.0, 99.69, 99.51, 99.53, 99.67, 99.51, 99.4, 101.19, 101.14, 101.2, 101.06, 101.28, 101.16, 101.06, 100.17, 100.87, 100.67, 100.83, 100.53, 100.35, 100.45, 100.28, 100.27, 100.35, 100.23, 100.31, 100.18, 100.09, 100.0, 99.86, 99.5, 99.49, 99.61, 99.57, 99.13, 98.83, 98.51, 98.6, 98.58, 98.65, 98.33, 98.06, 97.01, 96.86, 96.9, 96.74, 96.65, 96.79, 96.86],borderColor:'#059669',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
-{label:"Industrials",data:[100.0, 99.66, 99.34, 99.26, 99.3, 99.27, 99.41, 99.48, 99.51, 99.39, 99.36, 99.34, 99.52, 99.42, 99.23, 100.21, 100.13, 100.31, 100.25, 100.28, 100.44, 100.9, 100.64, 100.8, 100.63, 100.74, 100.82, 100.85, 100.6, 100.82, 100.78, 100.81, 100.9, 100.74, 100.37, 99.47, 99.16, 99.08, 99.15, 99.03, 99.04, 98.87, 98.63, 98.35, 98.08, 97.89, 97.95, 97.88, 98.13],borderColor:'#6366F1',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
-{label:"Real Estate",data:[100.0, 100.14, 99.81, 99.81, 99.69, 99.49, 99.71, 98.98, 99.11, 99.06, 98.98, 99.16, 98.98, 98.98, 99.42, 99.94, 99.86, 99.98, 99.98, 100.02, 100.16, 100.08, 100.07, 100.1, 99.8, 99.6, 99.65, 99.39, 100.02, 99.67, 99.85, 99.97, 99.75, 99.66, 99.34, 98.66, 98.36, 98.31, 98.47, 98.45, 98.36, 98.28, 98.51, 97.87, 97.77, 97.62, 97.32, 97.35, 97.4],borderColor:'#BE185D',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
-{label:"Comm. Services",data:[100.0, 99.84, 99.78, 99.7, 99.6, 99.56, 99.49, 101.18, 101.38, 101.18, 101.25, 101.05, 100.98, 100.86, 101.71, 101.79, 101.68, 101.77, 101.93, 101.84, 101.74, 100.61, 100.6, 100.67, 100.61, 100.61, 100.8, 100.53, 99.78, 99.9, 99.93, 100.0, 100.02, 100.0, 100.07, 99.93, 99.52, 99.18, 99.52, 99.69, 99.64, 99.43, 100.2, 100.06, 99.99, 99.92, 99.87, 99.82, 100.01],borderColor:'#DC2626',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
+  data:{labels:["Thu 09/03 09AM", "Thu 09/03 10AM", "Thu 09/03 11AM", "Thu 09/03 12PM", "Thu 09/03 01PM", "Thu 09/03 02PM", "Thu 09/03 03PM", "Fri 09/04 09AM", "Fri 09/04 10AM", "Fri 09/04 11AM", "Fri 09/04 12PM", "Fri 09/04 01PM", "Fri 09/04 02PM", "Fri 09/04 03PM", "Tue 09/08 09AM", "Tue 09/08 10AM", "Tue 09/08 11AM", "Tue 09/08 12PM", "Tue 09/08 01PM", "Tue 09/08 02PM", "Tue 09/08 03PM", "Wed 09/09 09AM", "Wed 09/09 10AM", "Wed 09/09 11AM", "Wed 09/09 12PM", "Wed 09/09 01PM", "Wed 09/09 02PM", "Wed 09/09 03PM", "Thu 09/10 09AM", "Thu 09/10 10AM", "Thu 09/10 11AM", "Thu 09/10 12PM", "Thu 09/10 01PM", "Thu 09/10 02PM", "Thu 09/10 03PM"],datasets:[{label:"S&P 500",data:[100.0, 100.56, 100.49, 100.52, 100.66, 100.62, 100.58, 100.33, 100.1, 100.26, 100.15, 100.16, 100.17, 100.2, 99.74, 99.89, 99.8, 99.84, 99.88, 99.78, 99.65, 99.39, 99.07, 99.08, 99.25, 99.24, 99.28, 99.18, 98.7, 98.77, 98.62, 98.69, 98.57, 98.56, 98.6],borderColor:'#1E3A5F',borderWidth:2.5,borderDash:[6,3],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
+{label:"Technology",data:[100.0, 100.67, 100.65, 100.59, 100.92, 100.79, 100.85, 101.7, 101.26, 101.47, 101.37, 101.34, 101.21, 101.54, 101.85, 102.26, 101.9, 102.13, 102.1, 101.96, 101.85, 102.16, 101.6, 101.67, 101.87, 101.85, 101.87, 101.89, 100.67, 100.99, 100.55, 100.76, 100.5, 100.57, 100.41],borderColor:'#2563EB',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
+{label:"Financials",data:[100.0, 100.6, 100.59, 100.62, 100.64, 100.79, 100.8, 99.85, 99.83, 100.21, 100.17, 100.33, 100.1, 100.05, 99.04, 99.1, 99.12, 98.95, 99.14, 98.87, 98.67, 98.56, 98.37, 98.39, 98.61, 98.42, 98.45, 98.26, 97.96, 98.02, 97.92, 97.79, 97.76, 97.75, 97.94],borderColor:'#16A34A',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
+{label:"Energy",data:[100.0, 100.17, 99.85, 99.83, 99.36, 99.32, 99.04, 98.08, 98.23, 98.2, 98.35, 98.25, 98.15, 98.17, 99.9, 99.36, 99.09, 98.71, 99.41, 99.49, 99.26, 100.05, 100.13, 100.02, 100.11, 100.16, 100.32, 100.07, 98.97, 99.45, 99.79, 99.89, 99.89, 99.63, 99.5],borderColor:'#EA580C',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
+{label:"Health Care",data:[100.0, 100.52, 100.5, 100.79, 100.7, 100.72, 100.84, 99.84, 99.94, 100.03, 99.78, 99.7, 99.71, 99.77, 97.57, 97.2, 97.61, 97.7, 97.71, 97.6, 97.27, 96.93, 97.13, 96.96, 97.07, 97.06, 97.08, 96.93, 96.68, 96.5, 96.46, 96.49, 96.51, 96.43, 96.4],borderColor:'#7C3AED',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
+{label:"Cons. Discret.",data:[100.0, 100.61, 100.64, 100.71, 100.73, 100.56, 100.36, 98.88, 98.74, 98.9, 98.85, 99.0, 99.13, 99.0, 98.21, 98.51, 98.51, 98.35, 98.32, 98.34, 98.25, 97.38, 96.82, 96.82, 97.1, 97.23, 97.1, 96.92, 96.85, 96.82, 96.83, 96.74, 96.58, 96.4, 96.47],borderColor:'#DB2777',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
+{label:"Cons. Staples",data:[100.0, 100.52, 100.58, 100.64, 100.54, 100.38, 100.31, 100.02, 99.99, 99.94, 99.66, 99.64, 99.66, 99.53, 98.99, 98.63, 98.91, 98.85, 98.82, 99.06, 98.86, 97.81, 97.58, 97.83, 97.78, 97.93, 97.81, 97.71, 98.17, 98.02, 98.11, 97.96, 97.94, 97.81, 97.79],borderColor:'#0891B2',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
+{label:"Utilities",data:[100.0, 100.38, 100.48, 100.45, 100.24, 100.43, 100.35, 100.65, 100.63, 100.65, 100.15, 100.24, 100.49, 100.45, 101.55, 101.47, 101.55, 101.64, 101.78, 101.69, 101.38, 100.68, 100.2, 100.08, 100.09, 100.44, 100.38, 100.21, 100.3, 99.65, 99.62, 99.41, 99.55, 99.39, 99.24],borderColor:'#D97706',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
+{label:"Materials",data:[100.0, 100.7, 100.5, 100.66, 100.36, 100.18, 100.28, 100.1, 100.1, 100.18, 100.06, 100.13, 100.01, 99.91, 99.83, 99.69, 99.33, 99.32, 99.44, 99.4, 98.96, 98.66, 98.34, 98.43, 98.41, 98.48, 98.16, 97.9, 96.85, 96.69, 96.73, 96.57, 96.49, 96.63, 96.69],borderColor:'#059669',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
+{label:"Industrials",data:[100.0, 100.98, 100.9, 101.08, 101.02, 101.06, 101.22, 101.68, 101.41, 101.58, 101.41, 101.52, 101.59, 101.63, 101.37, 101.6, 101.55, 101.59, 101.68, 101.51, 101.15, 100.24, 99.92, 99.85, 99.92, 99.8, 99.81, 99.63, 99.39, 99.11, 98.83, 98.65, 98.71, 98.63, 98.89],borderColor:'#6366F1',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
+{label:"Real Estate",data:[100.0, 100.52, 100.44, 100.56, 100.56, 100.6, 100.74, 100.66, 100.65, 100.68, 100.38, 100.18, 100.23, 99.97, 100.6, 100.25, 100.43, 100.55, 100.33, 100.24, 99.92, 99.24, 98.93, 98.88, 99.04, 99.02, 98.93, 98.85, 99.08, 98.44, 98.34, 98.19, 97.88, 97.92, 97.96],borderColor:'#BE185D',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
+{label:"Comm. Services",data:[100.0, 100.08, 99.97, 100.06, 100.22, 100.13, 100.03, 98.92, 98.91, 98.98, 98.92, 98.92, 99.1, 98.84, 98.11, 98.22, 98.25, 98.32, 98.34, 98.32, 98.39, 98.25, 97.85, 97.52, 97.84, 98.02, 97.97, 97.76, 98.51, 98.38, 98.31, 98.24, 98.19, 98.14, 98.33],borderColor:'#DC2626',borderWidth:1.6,borderDash:[],pointRadius:0,pointHoverRadius:4,tension:0.2,fill:false},
 ]},
   options: baseOpts('Index (Base=100)')
 });
@@ -658,7 +785,7 @@ const REFRESH_MKT_LABELS     = {"SPY": "S&P 500", "QQQ": "Nasdaq-100", "TLT": "L
 
 /* ── Student Performance Chart ──────────────────────────── */
 const HAS_PERF = true;
-const PERF     = {"dates": ["2026-09-03", "2026-09-04", "2026-09-08", "2026-09-09"], "spy": [100.0, 99.6146, 99.0675, 98.607], "ai": [100.0, 99.6146, 99.0675, 98.607], "students": {"S1-T01": [100.0, 99.6146, 99.0675, 98.607], "S1-T10": [100.0, 99.6146, 99.0675, 98.607], "S1-T11": [100.0, 99.6146, 99.0675, 98.607], "S1-T12": [100.0, 99.6146, 99.0675, 98.607], "S1-T13": [100.0, 99.6146, 99.0675, 98.607], "S1-T14": [100.0, 99.6146, 99.0675, 98.607], "S1-T02": [100.0, 99.6146, 99.0675, 98.607], "S1-T03": [100.0, 99.6146, 99.0675, 98.607], "S1-T04": [100.0, 99.6146, 99.0675, 98.607], "S1-T05": [100.0, 99.6146, 99.0675, 98.607], "S1-T06": [100.0, 99.6146, 99.0675, 98.607], "S1-T07": [100.0, 99.6146, 99.0675, 98.607], "S1-T08": [100.0, 99.6146, 99.0675, 98.607], "S1-T09": [100.0, 99.6146, 99.0675, 98.607], "S2-T01": [100.0, 99.6146, 99.0675, 98.607], "S2-T10": [100.0, 99.6146, 99.0675, 98.607], "S2-T11": [100.0, 99.6146, 99.0675, 98.607], "S2-T03": [100.0, 99.6146, 99.0675, 98.607], "S2-T04": [100.0, 99.6146, 99.0675, 98.607], "S2-T05": [100.0, 99.6146, 99.0675, 98.607], "S2-T06": [100.0, 99.6146, 99.0675, 98.607], "S2-T07": [100.0, 99.6146, 99.0675, 98.607], "S2-T08": [100.0, 99.6146, 99.0675, 98.607], "S2-T09": [100.0, 99.6146, 99.0675, 98.607], "S3-T01": [100.0, 99.6146, 99.0675, 98.607], "S3-T10": [100.0, 99.6146, 99.0675, 98.607], "S3-T02": [100.0, 99.6146, 99.0675, 98.607], "S3-T03": [100.0, 99.6146, 99.0675, 98.607], "S3-T04": [100.0, 99.6146, 99.0675, 98.607], "S3-T05": [100.0, 99.6146, 99.0675, 98.607], "S3-T06": [100.0, 99.6146, 99.0675, 98.607], "S3-T07": [100.0, 99.6146, 99.0675, 98.607], "S3-T08": [100.0, 99.6146, 99.0675, 98.607], "S3-T09": [100.0, 99.6146, 99.0675, 98.607], "S4-T01": [100.0, 99.6146, 99.0675, 98.607], "S4-T10": [100.0, 99.6146, 99.0675, 98.607], "S4-T02": [100.0, 99.6146, 99.0675, 98.607], "S4-T03": [100.0, 99.6146, 99.0675, 98.607], "S4-T04": [100.0, 99.6146, 99.0675, 98.607], "S4-T05": [100.0, 99.6146, 99.0675, 98.607], "S4-T06": [100.0, 99.6146, 99.0675, 98.607], "S4-T07": [100.0, 99.6146, 99.0675, 98.607], "S4-T08": [100.0, 99.6146, 99.0675, 98.607], "S4-T09": [100.0, 99.6146, 99.0675, 98.607], "S2-T02": [100.0, 99.6146, 99.0675, 98.607]}};
+const PERF     = {"dates": ["09/04 09:30", "09/04 09:45", "09/04 10:00", "09/04 10:15", "09/04 10:30", "09/04 10:45", "09/04 11:00", "09/04 11:15", "09/04 11:30", "09/04 11:45", "09/04 12:00", "09/04 12:15", "09/04 12:30", "09/04 12:45", "09/04 13:00", "09/04 13:15", "09/04 13:30", "09/04 13:45", "09/04 14:00", "09/04 14:15", "09/04 14:30", "09/04 14:45", "09/04 15:00", "09/04 15:15", "09/04 15:30", "09/04 15:45", "09/08 09:30", "09/08 09:45", "09/08 10:00", "09/08 10:15", "09/08 10:30", "09/08 10:45", "09/08 11:00", "09/08 11:15", "09/08 11:30", "09/08 11:45", "09/08 12:00", "09/08 12:15", "09/08 12:30", "09/08 12:45", "09/08 13:00", "09/08 13:15", "09/08 13:30", "09/08 13:45", "09/08 14:00", "09/08 14:15", "09/08 14:30", "09/08 14:45", "09/08 15:00", "09/08 15:15", "09/08 15:30", "09/08 15:45", "09/09 09:30", "09/09 09:45", "09/09 10:00", "09/09 10:15", "09/09 10:30", "09/09 10:45", "09/09 11:00", "09/09 11:15", "09/09 11:30", "09/09 11:45", "09/09 12:00", "09/09 12:15", "09/09 12:30", "09/09 12:45", "09/09 13:00", "09/09 13:15", "09/09 13:30", "09/09 13:45", "09/09 14:00", "09/09 14:15", "09/09 14:30", "09/09 14:45", "09/09 15:00", "09/09 15:15", "09/09 15:30", "09/09 15:45", "09/10 09:30", "09/10 09:45", "09/10 10:00", "09/10 10:15", "09/10 10:30", "09/10 10:45", "09/10 11:00", "09/10 11:15", "09/10 11:30", "09/10 11:45", "09/10 12:00", "09/10 12:15", "09/10 12:30", "09/10 12:45", "09/10 13:00", "09/10 13:15", "09/10 13:30", "09/10 13:45", "09/10 14:00", "09/10 14:15", "09/10 14:30", "09/10 14:45", "09/10 15:00", "09/10 15:15", "09/10 15:30", "09/10 15:45"], "spy": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "ai": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "students": {"S1-T01": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S1-T10": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S1-T11": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S1-T12": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S1-T13": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S1-T14": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S1-T02": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S1-T03": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S1-T04": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S1-T05": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S1-T06": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S1-T07": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S1-T08": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S1-T09": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S2-T01": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S2-T10": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S2-T11": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S2-T03": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S2-T04": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S2-T05": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S2-T06": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S2-T07": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S2-T08": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S2-T09": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S3-T01": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S3-T10": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S3-T02": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S3-T03": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S3-T04": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S3-T05": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S3-T06": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S3-T07": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S3-T08": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S3-T09": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S4-T01": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S4-T10": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S4-T02": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S4-T03": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S4-T04": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S4-T05": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S4-T06": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S4-T07": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S4-T08": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S4-T09": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494], "S2-T02": [100.0, 100.0181, 99.9301, 99.8757, 99.7578, 99.6478, 99.7112, 99.6452, 99.7187, 99.7135, 99.8135, 99.8045, 99.8407, 99.8342, 99.7643, 99.6998, 99.6309, 99.6489, 99.6749, 99.7034, 99.7384, 99.7514, 99.6698, 99.7203, 99.706, 99.7501, 99.368, 99.39, 99.2605, 99.2916, 99.346, 99.4146, 99.4652, 99.4347, 99.4574, 99.381, 99.359, 99.3434, 99.3318, 99.3227, 99.4127, 99.392, 99.3751, 99.39, 99.4302, 99.4295, 99.3978, 99.3007, 99.3175, 99.3279, 99.3059, 99.1997, 98.9096, 98.9549, 98.9261, 98.9394, 98.9122, 98.9135, 98.635, 98.6234, 98.714, 98.705, 98.637, 98.635, 98.7425, 98.7562, 98.8319, 98.8021, 98.7995, 98.8157, 98.7347, 98.7917, 98.8371, 98.7995, 98.8073, 98.8254, 98.7865, 98.7335, 98.1831, 98.0069, 98.0898, 98.2569, 98.2743, 98.3462, 98.3022, 98.3184, 98.3462, 98.2349, 98.1772, 98.1759, 98.2698, 98.321, 98.297, 98.2413, 98.2226, 98.1999, 98.1248, 98.1248, 98.141, 98.1358, 98.1403, 98.1151, 98.1675, 98.1494]}};
 const SEC_COLORS = {"1": "#2563EB", "2": "#16A34A", "3": "#EA580C", "4": "#7C3AED"};
 const SEC_LIGHT  = {"1": "rgba(37,99,235,0.25)", "2": "rgba(22,163,74,0.25)", "3": "rgba(234,88,12,0.25)", "4": "rgba(124,58,237,0.25)"};
 const ALL_SECTIONS = [1, 2, 3, 4];
@@ -791,6 +918,241 @@ function filterSection(sec, btn) {
 // Initial render
 renderPerfChart('all');
 
+/* ── Holdings Tab ────────────────────────────────────────────────── */
+const _H_WEEK_KEY = 'fina402_holdings_week';
+let holdingsWeek   = (()=>{ try { return parseInt(localStorage.getItem(_H_WEEK_KEY)||'2',10)||2; } catch(e){ return 2; } })();
+let holdingsLoaded = false;
+let _hAvgChart     = null;
+let _hSecChart     = null;
+
+function setHoldingsWeek(w) {
+  holdingsWeek = parseInt(w, 10) || 2;
+  try { localStorage.setItem(_H_WEEK_KEY, String(holdingsWeek)); } catch(e) {}
+  holdingsLoaded = false;  // force reload next visit
+}
+
+async function loadHoldings(week) {
+  const elLoad = document.getElementById('holdings-loading');
+  const elErr  = document.getElementById('holdings-error');
+  const elCont = document.getElementById('holdings-content');
+  elLoad.style.display = ''; elErr.style.display = 'none'; elCont.style.display = 'none';
+  try {
+    const body = {
+      structuredQuery: {
+        from: [{ collectionId: 'submissions' }],
+        where: {
+          fieldFilter: {
+            field: { fieldPath: 'week' },
+            op: 'EQUAL',
+            value: { integerValue: String(week) }
+          }
+        }
+      }
+    };
+    const r = await fetch(`${_FB_BASE}:runQuery?key=${_FB_API_KEY}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const rows = await r.json();
+    const subs = rows
+      .filter(row => row.document)
+      .map(row => {
+        const f = row.document.fields || {};
+        const alloc = {};
+        if (f.allocations && f.allocations.mapValue && f.allocations.mapValue.fields) {
+          Object.entries(f.allocations.mapValue.fields).forEach(([k,v]) => {
+            const pct = parseFloat(v.doubleValue ?? v.integerValue ?? 0);
+            if (pct > 0) alloc[k] = pct;
+          });
+        }
+        return {
+          section: parseInt(f.section?.integerValue ?? f.section?.doubleValue ?? 0, 10),
+          team:    parseInt(f.team?.integerValue    ?? f.team?.doubleValue    ?? 0, 10),
+          week:    parseInt(f.week?.integerValue    ?? f.week?.doubleValue    ?? 0, 10),
+          allocations: alloc,
+          rationale: f.rationale?.stringValue || ''
+        };
+      });
+    if (!subs.length) throw new Error('No submissions found for Week ' + week);
+    hRender(subs, week);
+    holdingsLoaded = true;
+    elLoad.style.display = 'none'; elCont.style.display = '';
+  } catch(e) {
+    elLoad.style.display = 'none';
+    elErr.style.display = '';
+    elErr.textContent = '⚠️ ' + (e.message || 'Failed to load submissions');
+  }
+}
+
+function hGetUsedETFs(subs) {
+  const totals = {};
+  subs.forEach(s => Object.entries(s.allocations).forEach(([etf, pct]) => {
+    totals[etf] = (totals[etf] || 0) + pct;
+  }));
+  return Object.entries(totals).sort((a,b)=>b[1]-a[1]).map(([etf])=>etf);
+}
+
+function hAvgByETF(subs, etfs) {
+  return etfs.map(etf => {
+    const vals = subs.map(s => s.allocations[etf] || 0);
+    return vals.reduce((a,b)=>a+b,0) / subs.length;
+  });
+}
+
+function hRender(subs, week) {
+  const etfs = hGetUsedETFs(subs);
+  const sections = [...new Set(subs.map(s=>s.section))].sort((a,b)=>a-b);
+
+  // Stats row
+  const statsEl = document.getElementById('h-stats');
+  statsEl.innerHTML = [
+    { label:'Week', val:'W'+week, sub:'' },
+    { label:'Submissions', val:subs.length, sub: sections.length+' section'+(sections.length!==1?'s':'') },
+    { label:'ETFs Used', val:etfs.length, sub:'out of universe' },
+    { label:'Avg Team Size', val:(subs.length/Math.max(1,[...new Set(subs.map(s=>s.section+'_'+s.team))].length)).toFixed(1), sub:'submissions/team' }
+  ].map(t=>`<div class="tile"><div class="tile-label">${t.label}</div><div class="tile-val">${t.val}</div><div class="tile-sub">${t.sub}</div></div>`).join('');
+
+  // Avg allocation bar chart
+  const avgVals = hAvgByETF(subs, etfs);
+  if (_hAvgChart) { _hAvgChart.destroy(); _hAvgChart = null; }
+  _hAvgChart = new Chart(document.getElementById('h-avg-chart'), {
+    type: 'bar',
+    data: {
+      labels: etfs,
+      datasets: [{ data: avgVals, backgroundColor: '#2D5BFF', borderRadius: 4 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#888', font: { size: 10 } }, grid: { display: false } },
+        y: { ticks: { color: '#888', font: { size: 10 }, callback: v=>v+'%' }, grid: { color: 'rgba(128,128,128,.1)' } }
+      }
+    }
+  });
+
+  // Section comparison — top 5 ETFs
+  const top5 = etfs.slice(0,5);
+  const secColors = ['#2D5BFF','#F5A623','#2ECC71','#E74C3C','#9B59B6'];
+  const secDatasets = sections.map((sec,i) => {
+    const secSubs = subs.filter(s=>s.section===sec);
+    return {
+      label: 'S'+sec,
+      data: top5.map(etf => secSubs.reduce((a,s)=>a+(s.allocations[etf]||0),0)/Math.max(1,secSubs.length)),
+      backgroundColor: secColors[i % secColors.length],
+      borderRadius: 3
+    };
+  });
+  if (_hSecChart) { _hSecChart.destroy(); _hSecChart = null; }
+  _hSecChart = new Chart(document.getElementById('h-sec-chart'), {
+    type: 'bar',
+    data: { labels: top5, datasets: secDatasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12, color: '#888' } } },
+      scales: {
+        x: { ticks: { color: '#888', font: { size: 10 } }, grid: { display: false } },
+        y: { ticks: { color: '#888', font: { size: 10 }, callback: v=>v+'%' }, grid: { color: 'rgba(128,128,128,.1)' } }
+      }
+    }
+  });
+
+  // Heatmap
+  const heatEl = document.getElementById('h-heatmap');
+  const maxVal = Math.max(...sections.flatMap(sec => etfs.map(etf => {
+    const ss = subs.filter(s=>s.section===sec);
+    return ss.reduce((a,s)=>a+(s.allocations[etf]||0),0)/Math.max(1,ss.length);
+  })));
+  let html = '<table style="border-collapse:collapse;font-size:11px;min-width:100%"><thead><tr>';
+  html += '<th style="padding:5px 8px;text-align:left;color:var(--muted)">Section</th>';
+  etfs.forEach(etf => { html += `<th style="padding:5px 6px;color:var(--muted);font-weight:500">${etf}</th>`; });
+  html += '</tr></thead><tbody>';
+  sections.forEach(sec => {
+    const ss = subs.filter(s=>s.section===sec);
+    html += `<tr><td style="padding:5px 8px;font-weight:600;color:var(--text)">S${sec}</td>`;
+    etfs.forEach(etf => {
+      const avg = ss.reduce((a,s)=>a+(s.allocations[etf]||0),0)/Math.max(1,ss.length);
+      const intensity = maxVal>0 ? avg/maxVal : 0;
+      const bg = `rgba(45,91,255,${(intensity*0.7+0.05).toFixed(2)})`;
+      const fg = intensity>0.5 ? '#fff' : 'var(--text)';
+      html += `<td style="padding:5px 6px;text-align:center;background:${bg};color:${fg};border-radius:3px">${avg>0?avg.toFixed(1)+'%':'—'}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  heatEl.innerHTML = html;
+
+  // Teams accordion
+  const teamsEl = document.getElementById('h-teams');
+  teamsEl.innerHTML = '';
+  sections.forEach(sec => {
+    const secSubs = subs.filter(s=>s.section===sec).sort((a,b)=>a.team-b.team);
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'margin-bottom:8px';
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'font-weight:600;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding:6px 0;cursor:pointer;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border)';
+    hdr.innerHTML = `<span>▶</span> Section ${sec} <span style="font-weight:400;font-size:11px">(${secSubs.length} team${secSubs.length!==1?'s':''})</span>`;
+    const body = document.createElement('div');
+    body.style.display = 'none';
+    hdr.onclick = () => {
+      const open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : '';
+      hdr.querySelector('span').textContent = open ? '▶' : '▼';
+    };
+    secSubs.forEach(s => {
+      const row = document.createElement('div');
+      row.style.cssText = 'padding:8px 4px;border-bottom:1px solid var(--border);font-size:12px';
+      const allocStr = Object.entries(s.allocations).sort((a,b)=>b[1]-a[1])
+        .map(([etf,pct])=>`<span style="display:inline-block;background:var(--tag);color:var(--text);padding:2px 7px;border-radius:10px;margin:2px">${etf} ${pct.toFixed(0)}%</span>`).join('');
+      row.innerHTML = `<div style="font-weight:600;color:var(--text);margin-bottom:4px">Team ${s.team}</div><div style="margin-bottom:4px">${allocStr}</div><div style="color:var(--muted);font-size:11px;line-height:1.5">${s.rationale||'<em>No rationale</em>'}</div>`;
+      body.appendChild(row);
+    });
+    wrapper.appendChild(hdr); wrapper.appendChild(body);
+    teamsEl.appendChild(wrapper);
+  });
+
+  // Themes
+  const THEMES = [
+    { name:'Equity Growth', keywords:['growth','equity','stock','bull','upside','momentum','risk-on'] },
+    { name:'Fixed Income', keywords:['bond','fixed','income','yield','duration','treasury','rate'] },
+    { name:'Defensive',    keywords:['defensive','safe','protect','hedge','low volatility','risk-off'] },
+    { name:'Inflation',    keywords:['inflation','real asset','commodity','gold','commodity','tip'] },
+    { name:'Global/EM',    keywords:['emerging','international','global','foreign','developed'] },
+    { name:'Real Estate',  keywords:['real estate','reit','property','housing','vnq'] },
+    { name:'Tech/Innovation', keywords:['technology','tech','innovation','qqq','nasdaq','software','semiconductor'] },
+    { name:'Credit/HY',   keywords:['credit','high yield','spread','hyg','corporate','junk'] }
+  ];
+  const allText = subs.map(s=>s.rationale.toLowerCase()).join(' ');
+  const themesEl = document.getElementById('h-themes');
+  themesEl.innerHTML = THEMES.map(th => {
+    const count = th.keywords.reduce((a,kw) => a + (allText.split(kw).length-1), 0);
+    if (!count) return '';
+    const intensity = Math.min(1, count/Math.max(1,subs.length*0.5));
+    const bg = `rgba(45,91,255,${(intensity*0.35+0.08).toFixed(2)})`;
+    return `<div style="background:${bg};border:1px solid rgba(45,91,255,.25);border-radius:8px;padding:10px 14px">
+      <div style="font-weight:600;font-size:12px;color:var(--text)">${th.name}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">${count} mention${count!==1?'s':''}</div>
+    </div>`;
+  }).join('');
+
+  // Keywords cloud
+  const stopwords = new Set(['the','a','an','and','or','but','in','on','at','to','for','of','with','by','is','are','was','were','be','been','as','it','its','this','that','we','our','their','from','portfolio','allocation','etf','fund','invest']);
+  const wordFreq = {};
+  subs.forEach(s => {
+    s.rationale.toLowerCase().replace(/[^a-z\s]/g,'').split(/\s+/).forEach(w => {
+      if (w.length>3 && !stopwords.has(w)) wordFreq[w] = (wordFreq[w]||0)+1;
+    });
+  });
+  const topWords = Object.entries(wordFreq).sort((a,b)=>b[1]-a[1]).slice(0,30);
+  const maxFreq = topWords[0]?.[1] || 1;
+  const kwEl = document.getElementById('h-keywords');
+  kwEl.innerHTML = topWords.map(([w,f]) => {
+    const sz = Math.round(10 + (f/maxFreq)*8);
+    const op = (0.5 + (f/maxFreq)*0.5).toFixed(2);
+    return `<span style="font-size:${sz}px;opacity:${op};background:var(--tag);color:var(--text);padding:3px 9px;border-radius:12px;white-space:nowrap">${w}</span>`;
+  }).join('');
+}
+
 /* ── Settings password — Firebase-backed (global across devices) ── */
 const DEFAULT_PW     = "FINA402";
 const _FB_API_KEY    = "AIzaSyAjHL3MztreUN7J7QKW3q_nRbiNoxLwA0E";
@@ -889,6 +1251,9 @@ function showPage(pageId, btn) {
       setTimeout(() => document.getElementById('spw')?.focus(), 50);
     }
   }
+  if (pageId === 'holdings' && !holdingsLoaded) {
+    loadHoldings(holdingsWeek);
+  }
 }
 
 function checkSettingsPw() {
@@ -906,8 +1271,6 @@ function checkSettingsPw() {
 function goToDashboard() {
   const dashBtn = document.querySelector('.tab-btn');
   showPage('dashboard', dashBtn);
-  dashBtn.classList.add('active');
-  document.querySelector('.tab-btn:nth-child(2)')?.classList.remove('active');
 }
 
 /* ── Settings toggles ───────────────────────────────────── */
@@ -949,6 +1312,11 @@ function applySettings() {
 // Init on load
 loadSettings();
 applySettings();
+// Sync Holdings week selector to stored preference
+(function(){
+  const sel = document.getElementById('holdings-week-sel');
+  if (sel) sel.value = String(holdingsWeek);
+})();
 
 /* ── Reset All Settings ──────────────────────────────────── */
 function resetAllSettings() {
