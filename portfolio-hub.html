@@ -292,11 +292,11 @@ const DEFAULT_ACTIVE = ["SPY", "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLU", 
    activeWeek is auto-computed from today so the hub always shows
    the right week without any manual "advance week" click.
 ──────────────────────────────────────────────────────────────── */
-const _FIRST_OPEN = new Date("2026-09-04"+'T00:00:00Z');  // Sep 4 2026 UTC midnight
+const _FIRST_OPEN = new Date("2026-09-04"+'T00:00:00');  // Sep 4 2026 LOCAL midnight
 function computeActiveWeek() {
   const now = new Date();
-  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const days = Math.max(0, Math.floor((todayUTC - _FIRST_OPEN.getTime()) / 86400000));
+  const todayLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.max(0, Math.floor((todayLocal - _FIRST_OPEN) / 86400000));
   return 2 + Math.floor(days / 7);
 }
 
@@ -374,9 +374,13 @@ async function doTeamLogin(){
     const rec=teamPasswords[teamKey];
     if(!rec){$('lm-msg').innerHTML='<div class="msg er">Team not found. Contact your instructor.</div>';btn.disabled=false;btn.textContent='Log In';return;}
     if(rec.hash!==h){$('lm-msg').innerHTML='<div class="msg er">Incorrect password.</div>';btn.disabled=false;btn.textContent='Log In';return;}
-    // Success — check mustChange
+    // Success — check section open before proceeding
     const m=teamKey.match(/^S(\d+)-T(\d+)$/);
     const sess={team:teamKey,section:Number(m[1]),teamNum:Number(m[2]),passHash:h};
+    if(sectionControl[sess.section]===false){
+      $('lm-msg').innerHTML='<div class="msg er" style="text-align:left">🔒 <strong>Week not active yet for your section.</strong><br>Your instructor will open it in class.</div>';
+      btn.disabled=false; btn.textContent='Log In'; return;
+    }
     if(rec.mustChange){
       teamSession=sess;
       showChangePassModal(true);
