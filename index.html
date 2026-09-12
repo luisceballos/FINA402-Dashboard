@@ -6,7 +6,6 @@
 <title>FINA 402 Market Dashboard</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/3.0.1/chartjs-plugin-annotation.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
@@ -447,6 +446,9 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeEtf();}
         <button class="btn bp-" onclick="checkSettingsPw()">Sign In</button>
         <button class="btn bh-" onclick="goToDashboard()">← Dashboard</button>
       </div>
+      <div style="font-size:11px;margin-top:12px;color:var(--muted)">
+        Locked out? <a href="#" style="color:var(--blue)" onclick="event.preventDefault();localStorage.removeItem('fina402_settings_pw');location.reload()">Reset to default password</a>
+      </div>
     </div>
   </div>
 
@@ -820,12 +822,10 @@ function renderPerfChart(secFilter) {
             filter: item => !item.text.match(/^S\d+-T\d+$/), // hide individual team labels
             boxWidth: 10, font: {size: 9.5}, color: labelC, padding: 8
           }
-        },
-        annotation: {
-          annotations: buildRebalanceAnnotations(PERF.dates)
         }
       }
-    }
+    },
+    plugins: [rebalanceLinesPlugin]
   });
 }
 
@@ -1652,45 +1652,57 @@ function downloadPortfolioXLSX() {
   btn.disabled = false;
 }
 
-/* ── Perf chart: week-rebalance vertical annotations ────── */
+/* ── Perf chart: week-rebalance vertical lines (custom plugin, no CDN needed) ── */
 const _FF_DATE = new Date('2026-09-04T12:00:00Z');
 
-function buildRebalanceAnnotations(dates) {
-  // dates: array of label strings from PERF.dates (e.g. "09/11 09:30" or "2026-09-11")
-  const annotations = {};
-  // Check up to 16 weeks (a typical semester)
+// Returns array of {idx, label} for each rebalancing Friday found in dates[]
+function buildRebalanceLines(dates) {
+  const lines = [];
   for (let wk = 2; wk <= 16; wk++) {
     const weekStart = new Date(_FF_DATE);
     weekStart.setUTCDate(weekStart.getUTCDate() + 7 * (wk - 1));
-    const iso = weekStart.toISOString().slice(0, 10); // "YYYY-MM-DD"
-    // Convert to MM/DD prefix used in 5m chart labels  (e.g. "09/11")
-    const mmdd = iso.slice(5, 7) + '/' + iso.slice(8, 10);
-
-    // Find the first label in dates that starts with mmdd or equals iso
+    const iso  = weekStart.toISOString().slice(0, 10);          // "YYYY-MM-DD"
+    const mmdd = iso.slice(5, 7) + '/' + iso.slice(8, 10);      // "MM/DD"
+    // Match 5m-style "09/11 09:30" or daily-style "2026-09-11"
     const idx = dates.findIndex(lbl => lbl.startsWith(mmdd) || lbl === iso);
-    if (idx === -1) break; // past available data — stop
-
-    annotations['wk' + wk] = {
-      type: 'line',
-      xMin: idx,
-      xMax: idx,
-      borderColor: isDark ? 'rgba(255,255,255,0.30)' : 'rgba(30,58,95,0.25)',
-      borderWidth: 1.2,
-      borderDash: [4, 3],
-      label: {
-        display: true,
-        content: 'Week ' + wk + ' Rebalance',
-        position: 'start',
-        yAdjust: 4,
-        backgroundColor: 'transparent',
-        color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(30,58,95,0.60)',
-        font: { size: 8, weight: '500' },
-        padding: { x: 3, y: 2 }
-      }
-    };
+    if (idx === -1) break;   // no more data
+    lines.push({ idx, label: 'Week ' + wk + ' Rebalance' });
   }
-  return annotations;
+  return lines;
 }
+
+// Inline Chart.js plugin — draws dashed vertical lines + small labels
+const rebalanceLinesPlugin = {
+  id: 'rebalanceLines',
+  afterDraw(chart) {
+    const { ctx, chartArea, scales, data } = chart;
+    if (!chartArea || !scales.x) return;
+    const lines = buildRebalanceLines(data.labels || []);
+    if (!lines.length) return;
+    const lineClr = isDark ? 'rgba(255,255,255,0.28)' : 'rgba(30,58,95,0.22)';
+    const textClr = isDark ? 'rgba(255,255,255,0.50)' : 'rgba(30,58,95,0.55)';
+    ctx.save();
+    ctx.font = '500 8px Inter, sans-serif';
+    ctx.textBaseline = 'top';
+    lines.forEach(({ idx, label }) => {
+      const x = scales.x.getPixelForValue(idx);
+      if (x < chartArea.left || x > chartArea.right) return;
+      // dashed vertical line
+      ctx.beginPath();
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = lineClr;
+      ctx.lineWidth = 1.2;
+      ctx.moveTo(x, chartArea.top);
+      ctx.lineTo(x, chartArea.bottom);
+      ctx.stroke();
+      // label just below the top edge
+      ctx.setLineDash([]);
+      ctx.fillStyle = textClr;
+      ctx.fillText(label, x + 3, chartArea.top + 4);
+    });
+    ctx.restore();
+  }
+};
 </script>
 </body>
 </html>
