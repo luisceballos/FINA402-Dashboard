@@ -6,6 +6,8 @@
 <title>FINA 402 Market Dashboard</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/3.0.1/chartjs-plugin-annotation.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
   --bg:#F4F6FA;--surface:#FFFFFF;--navy:#1E3A5F;--navy2:#2C5282;
@@ -579,38 +581,19 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeEtf();}
     </div>
   </div>
 
-  <!-- Daily Portfolio Verification Tool -->
+  <!-- Daily Portfolio History Download -->
   <div class="settings-card">
-    <div class="settings-card-title">📊 Verificación Portfolio Diario</div>
+    <div class="settings-card-title">📊 Daily Portfolio History</div>
     <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">
-      Genera el portfolio diario de cada equipo y sección, más SPY y AI, indexado a 100 desde el primer día.
-      Útil para verificar que los cálculos del ranking coinciden con la gráfica.
+      Downloads an Excel workbook with daily portfolio values indexed to 100 from Day 1.
+      Each section gets its own sheet, plus an "All Teams" summary sheet.
+      Use it to verify that ranking figures match the chart.
     </p>
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
-      <button id="daily-port-btn" class="btn bp-" onclick="toggleDailyPortfolio()" style="padding:9px 20px">
-        📊 Generar Portfolio Diario
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button id="daily-port-btn" class="btn bp-" onclick="downloadPortfolioXLSX()" style="padding:9px 20px">
+        📥 Download Portfolio History (XLSX)
       </button>
       <span id="daily-port-msg" style="font-size:12px;color:var(--muted)"></span>
-    </div>
-    <div id="daily-port-container" style="display:none">
-      <div style="position:relative;height:320px;margin-bottom:16px">
-        <canvas id="dailyPortChart"></canvas>
-      </div>
-      <div style="overflow-x:auto">
-        <table id="daily-port-table" style="width:100%;border-collapse:collapse;font-size:11.5px">
-          <thead>
-            <tr style="background:var(--navy);color:#fff;text-align:left">
-              <th style="padding:7px 10px">Equipo</th>
-              <th style="padding:7px 10px">Sección</th>
-              <th style="padding:7px 10px;text-align:right">Inicio</th>
-              <th style="padding:7px 10px;text-align:right">Último Cierre</th>
-              <th style="padding:7px 10px;text-align:right">Retorno Total</th>
-              <th style="padding:7px 10px;text-align:right">vs SPY</th>
-            </tr>
-          </thead>
-          <tbody id="daily-port-tbody"></tbody>
-        </table>
-      </div>
     </div>
   </div>
 
@@ -837,6 +820,9 @@ function renderPerfChart(secFilter) {
             filter: item => !item.text.match(/^S\d+-T\d+$/), // hide individual team labels
             boxWidth: 10, font: {size: 9.5}, color: labelC, padding: 8
           }
+        },
+        annotation: {
+          annotations: buildRebalanceAnnotations(PERF.dates)
         }
       }
     }
@@ -1586,169 +1572,124 @@ async function refreshMarketCharts() {
   btn.disabled = false;
 }
 
-/* ── Daily Portfolio Verification Tool ───────────────────── */
-let _dailyChartInst = null;
-
-function section_of_entity(name) {
+/* ── Daily Portfolio XLSX Download ───────────────────────── */
+function _secOf(name) {
   const m = name.match(/^S(\d+)/i);
   return m ? parseInt(m[1]) : 0;
 }
 
-function toggleDailyPortfolio() {
-  const container = document.getElementById('daily-port-container');
-  const btn       = document.getElementById('daily-port-btn');
-  const msg       = document.getElementById('daily-port-msg');
+function downloadPortfolioXLSX() {
+  const btn = document.getElementById('daily-port-btn');
+  const msg = document.getElementById('daily-port-msg');
+  const d   = DAILY_PERF;
 
-  if (container.style.display !== 'none') {
-    container.style.display = 'none';
-    btn.textContent = '📊 Generar Portfolio Diario';
-    return;
-  }
-
-  const d = DAILY_PERF;
   if (!d || !d.dates || d.dates.length === 0) {
-    msg.textContent = '⚠️ Sin datos — re-genera el dashboard primero.';
+    msg.textContent = '⚠️ No data — regenerate the dashboard first.';
+    return;
+  }
+  if (typeof XLSX === 'undefined') {
+    msg.textContent = '⚠️ XLSX library not loaded. Check your internet connection.';
     return;
   }
 
-  container.style.display = '';
-  btn.textContent = '▲ Ocultar';
-  msg.textContent = '';
+  btn.disabled = true;
+  msg.textContent = '⏳ Building workbook…';
 
-  // ── Build datasets ───────────────────────────────────────
-  const datasets = [];
-  const secPalette = {
-    1: '#1E3A5F', 2: '#2563EB', 3: '#7C3AED', 4: '#DB2777',
-    5: '#D97706', 6: '#059669', 7: '#DC2626', 8: '#0891B2'
-  };
-  function secColor(sec) { return secPalette[sec] || '#888888'; }
+  try {
+    const wb = XLSX.utils.book_new();
 
-  // Student teams — thin lines, colored by section
-  const secGroups = {};
-  for (const [entity, vals] of Object.entries(d.students || {})) {
-    const sec = section_of_entity(entity);
-    if (!secGroups[sec]) secGroups[sec] = [];
-    secGroups[sec].push({ entity, vals });
-    const lastValid = [...vals].reverse().find(v => v !== null);
-    datasets.push({
-      label: entity,
-      data:  vals,
-      borderColor: secColor(sec),
-      borderWidth: 1.2,
-      pointRadius: 0, pointHoverRadius: 4,
-      tension: 0.2, fill: false, spanGaps: true,
-      _sec: sec, _last: lastValid ?? null
-    });
-  }
+    // Collect all entity names and their section
+    const entities = Object.keys(d.students || {}).sort();
+    const allSections = [...new Set(entities.map(_secOf))].sort((a,b) => a-b);
 
-  // Section averages — medium weight lines
-  for (const [sec, teams] of Object.entries(secGroups)) {
-    const n = d.dates.length;
-    const avg = Array.from({length: n}, (_, i) => {
-      const vs = teams.map(t => t.vals[i]).filter(v => v !== null && v !== undefined);
-      return vs.length ? vs.reduce((a,b) => a+b, 0) / vs.length : null;
-    });
-    datasets.push({
-      label: `Sec ${sec} (prom)`,
-      data:  avg,
-      borderColor: secColor(parseInt(sec)),
-      borderWidth: 2.2,
-      borderDash: [4, 3],
-      pointRadius: 0, pointHoverRadius: 5,
-      tension: 0.2, fill: false, spanGaps: true,
-      _sec: parseInt(sec), _last: [...avg].reverse().find(v => v !== null) ?? null
-    });
-  }
+    // ── Helper: build one sheet's row array ──────────────────
+    function buildRows(entitySubset) {
+      // Header row
+      const header = ['Date', 'SPY'];
+      if (d.ai) header.push('AI Portfolio');
+      entitySubset.forEach(e => header.push(e));
 
-  // AI — thick amber
-  if (d.ai) {
-    const lastAI = [...d.ai].reverse().find(v => v !== null);
-    datasets.push({
-      label: 'AI Portfolio',
-      data:  d.ai,
-      borderColor: '#C49A28',
-      borderWidth: 2.5,
-      pointRadius: 0, pointHoverRadius: 5,
-      tension: 0.2, fill: false, spanGaps: true,
-      _sec: -1, _last: lastAI ?? null
-    });
-  }
-
-  // SPY — thick navy dashed
-  const lastSPY = [...d.spy].reverse().find(v => v !== null);
-  datasets.push({
-    label: 'SPY',
-    data:  d.spy,
-    borderColor: '#1E3A5F',
-    borderWidth: 2.5,
-    borderDash: [6, 3],
-    pointRadius: 0, pointHoverRadius: 5,
-    tension: 0.2, fill: false, spanGaps: true,
-    _sec: -2, _last: lastSPY ?? null
-  });
-
-  // ── Render chart ─────────────────────────────────────────
-  if (_dailyChartInst) { _dailyChartInst.destroy(); _dailyChartInst = null; }
-  const ctx = document.getElementById('dailyPortChart').getContext('2d');
-  _dailyChartInst = new Chart(ctx, {
-    type: 'line',
-    data: { labels: d.dates, datasets },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 9 }, color: labelC, padding: 6, filter: item => item.text.includes('prom') || item.text === 'SPY' || item.text === 'AI Portfolio' } },
-        tooltip: { callbacks: { label: c => '  ' + c.dataset.label + ': ' + (c.parsed.y != null ? c.parsed.y.toFixed(2) : '—') } }
-      },
-      scales: {
-        x: { grid: { color: gridC }, ticks: { color: labelC, font: { size: 9 }, maxTicksLimit: 10 } },
-        y: { grid: { color: gridC }, ticks: { color: labelC, font: { size: 9 }, callback: v => v.toFixed(1) },
-             title: { display: true, text: 'Indexed (100 = start)', color: labelC, font: { size: 9 } } }
-      }
+      const rows = [header];
+      d.dates.forEach((dt, i) => {
+        const row = [dt, d.spy[i] != null ? +d.spy[i].toFixed(4) : null];
+        if (d.ai) row.push(d.ai[i] != null ? +d.ai[i].toFixed(4) : null);
+        entitySubset.forEach(e => {
+          const v = d.students[e]?.[i];
+          row.push(v != null ? +v.toFixed(4) : null);
+        });
+        rows.push(row);
+      });
+      return rows;
     }
-  });
 
-  // ── Build table ──────────────────────────────────────────
-  const spyLast = lastSPY ?? 100;
-  const rows = [];
+    // ── "All Teams" sheet ────────────────────────────────────
+    const allRows  = buildRows(entities);
+    const wsAll    = XLSX.utils.aoa_to_sheet(allRows);
+    // Column widths
+    wsAll['!cols'] = [{ wch: 12 }, { wch: 9 }, ...(d.ai ? [{ wch: 14 }] : []), ...entities.map(() => ({ wch: 10 }))];
+    XLSX.utils.book_append_sheet(wb, wsAll, 'All Teams');
 
-  // SPY row
-  rows.push({ label: 'SPY', sec: '—', start: 100, last: spyLast, ret: spyLast - 100, vsSpy: 0, isBench: true });
+    // ── One sheet per section ────────────────────────────────
+    allSections.forEach(sec => {
+      const subset = entities.filter(e => _secOf(e) === sec);
+      if (!subset.length) return;
+      const rows = buildRows(subset);
+      const ws   = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [{ wch: 12 }, { wch: 9 }, ...(d.ai ? [{ wch: 14 }] : []), ...subset.map(() => ({ wch: 10 }))];
+      XLSX.utils.book_append_sheet(wb, ws, `Section ${sec}`);
+    });
 
-  // AI row
-  if (d.ai) {
-    const aiLast = [...d.ai].reverse().find(v => v !== null) ?? 100;
-    rows.push({ label: 'AI Portfolio', sec: '—', start: 100, last: aiLast, ret: aiLast - 100, vsSpy: aiLast - spyLast, isBench: true });
+    // ── File name with today's date ──────────────────────────
+    const today = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `FINA402_Portfolio_History_${today}.xlsx`);
+
+    const lastDate = d.dates[d.dates.length - 1] || '?';
+    msg.innerHTML = `<span style="color:var(--green)">✅ Downloaded — data through <strong>${lastDate}</strong></span>`;
+  } catch(err) {
+    msg.textContent = '⚠️ Error: ' + err.message;
+    console.error('XLSX export error', err);
   }
+  btn.disabled = false;
+}
 
-  // Student rows
-  const studentDs = datasets.filter(ds => !ds.label.includes('prom') && ds.label !== 'SPY' && ds.label !== 'AI Portfolio');
-  studentDs.sort((a, b) => (b._last ?? 0) - (a._last ?? 0));
-  studentDs.forEach(ds => {
-    const last = ds._last ?? 100;
-    rows.push({ label: ds.label, sec: 'S' + ds._sec, start: 100, last, ret: last - 100, vsSpy: last - spyLast, isBench: false });
-  });
+/* ── Perf chart: week-rebalance vertical annotations ────── */
+const _FF_DATE = new Date('2026-09-04T12:00:00Z');
 
-  function fmt(v, dec=2) {
-    const sign = v > 0 ? '+' : '';
-    const color = v > 0.05 ? 'var(--green)' : v < -0.05 ? 'var(--red,#dc2626)' : 'var(--muted)';
-    return `<span style="color:${color}">${sign}${v.toFixed(dec)}%</span>`;
+function buildRebalanceAnnotations(dates) {
+  // dates: array of label strings from PERF.dates (e.g. "09/11 09:30" or "2026-09-11")
+  const annotations = {};
+  // Check up to 16 weeks (a typical semester)
+  for (let wk = 2; wk <= 16; wk++) {
+    const weekStart = new Date(_FF_DATE);
+    weekStart.setUTCDate(weekStart.getUTCDate() + 7 * (wk - 1));
+    const iso = weekStart.toISOString().slice(0, 10); // "YYYY-MM-DD"
+    // Convert to MM/DD prefix used in 5m chart labels  (e.g. "09/11")
+    const mmdd = iso.slice(5, 7) + '/' + iso.slice(8, 10);
+
+    // Find the first label in dates that starts with mmdd or equals iso
+    const idx = dates.findIndex(lbl => lbl.startsWith(mmdd) || lbl === iso);
+    if (idx === -1) break; // past available data — stop
+
+    annotations['wk' + wk] = {
+      type: 'line',
+      xMin: idx,
+      xMax: idx,
+      borderColor: isDark ? 'rgba(255,255,255,0.30)' : 'rgba(30,58,95,0.25)',
+      borderWidth: 1.2,
+      borderDash: [4, 3],
+      label: {
+        display: true,
+        content: 'Week ' + wk + ' Rebalance',
+        position: 'start',
+        yAdjust: 4,
+        backgroundColor: 'transparent',
+        color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(30,58,95,0.60)',
+        font: { size: 8, weight: '500' },
+        padding: { x: 3, y: 2 }
+      }
+    };
   }
-
-  const tbody = document.getElementById('daily-port-tbody');
-  tbody.innerHTML = rows.map(r => `
-    <tr style="border-bottom:1px solid var(--border);${r.isBench ? 'font-weight:600;background:var(--tag,#F0F4FF)' : ''}">
-      <td style="padding:6px 10px">${r.label}</td>
-      <td style="padding:6px 10px;color:var(--muted)">${r.sec}</td>
-      <td style="padding:6px 10px;text-align:right">100.00</td>
-      <td style="padding:6px 10px;text-align:right">${r.last.toFixed(2)}</td>
-      <td style="padding:6px 10px;text-align:right">${fmt(r.ret)}</td>
-      <td style="padding:6px 10px;text-align:right">${fmt(r.vsSpy)}</td>
-    </tr>`).join('');
-
-  // Summary line
-  const lastDate = d.dates[d.dates.length - 1] || '—';
-  msg.innerHTML = `<span style="color:var(--muted)">Último cierre disponible: <strong>${lastDate}</strong></span>`;
+  return annotations;
 }
 </script>
 </body>
