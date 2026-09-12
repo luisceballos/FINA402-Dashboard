@@ -750,26 +750,33 @@ const rebalanceLinesPlugin = {
     if (!chartArea || !scales.x) return;
     const lines = buildRebalanceLines(data.labels || []);
     if (!lines.length) return;
-    const lineClr = isDark ? 'rgba(255,255,255,0.28)' : 'rgba(30,58,95,0.22)';
-    const textClr = isDark ? 'rgba(255,255,255,0.50)' : 'rgba(30,58,95,0.55)';
+    const lineClr = isDark ? 'rgba(99,179,237,0.75)' : 'rgba(37,99,235,0.65)';
+    const textClr = isDark ? 'rgba(99,179,237,0.95)' : 'rgba(37,99,235,0.90)';
+    const bgClr   = isDark ? 'rgba(30,40,60,0.70)'   : 'rgba(255,255,255,0.80)';
     ctx.save();
-    ctx.font = '500 8px Inter, sans-serif';
+    ctx.font = '600 9.5px Inter, sans-serif';
     ctx.textBaseline = 'top';
     lines.forEach(({ idx, label }) => {
       const x = scales.x.getPixelForValue(idx);
       if (x < chartArea.left || x > chartArea.right) return;
       // dashed vertical line
       ctx.beginPath();
-      ctx.setLineDash([4, 3]);
+      ctx.setLineDash([5, 3]);
       ctx.strokeStyle = lineClr;
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 2;
       ctx.moveTo(x, chartArea.top);
       ctx.lineTo(x, chartArea.bottom);
       ctx.stroke();
-      // label just below the top edge
+      // pill label just below the top edge
       ctx.setLineDash([]);
+      const pad = 4, tw = ctx.measureText(label).width;
+      const lx = x + 5, ly = chartArea.top + 6;
+      ctx.fillStyle = bgClr;
+      ctx.beginPath();
+      ctx.roundRect(lx - pad, ly - pad, tw + pad * 2, 18, 3);
+      ctx.fill();
       ctx.fillStyle = textClr;
-      ctx.fillText(label, x + 3, chartArea.top + 4);
+      ctx.fillText(label, lx, ly);
     });
     ctx.restore();
   }
