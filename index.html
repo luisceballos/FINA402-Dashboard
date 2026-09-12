@@ -723,6 +723,58 @@ const AI_COLOR = '#C49A28';
   });
 })();
 
+/* ── Perf chart: week-rebalance vertical lines (custom plugin, no CDN needed) ── */
+const _FF_DATE = new Date('2026-09-04T12:00:00Z');
+
+// Returns array of {idx, label} for each rebalancing Friday found in dates[]
+function buildRebalanceLines(dates) {
+  const lines = [];
+  for (let wk = 2; wk <= 16; wk++) {
+    const weekStart = new Date(_FF_DATE);
+    weekStart.setUTCDate(weekStart.getUTCDate() + 7 * (wk - 1));
+    const iso  = weekStart.toISOString().slice(0, 10);          // "YYYY-MM-DD"
+    const mmdd = iso.slice(5, 7) + '/' + iso.slice(8, 10);      // "MM/DD"
+    // Match 5m-style "09/11 09:30" or daily-style "2026-09-11"
+    const idx = dates.findIndex(lbl => lbl.startsWith(mmdd) || lbl === iso);
+    if (idx === -1) break;   // no more data
+    lines.push({ idx, label: 'Week ' + wk + ' Rebalance' });
+  }
+  return lines;
+}
+
+// Inline Chart.js plugin — draws dashed vertical lines + small labels
+const rebalanceLinesPlugin = {
+  id: 'rebalanceLines',
+  afterDraw(chart) {
+    const { ctx, chartArea, scales, data } = chart;
+    if (!chartArea || !scales.x) return;
+    const lines = buildRebalanceLines(data.labels || []);
+    if (!lines.length) return;
+    const lineClr = isDark ? 'rgba(255,255,255,0.28)' : 'rgba(30,58,95,0.22)';
+    const textClr = isDark ? 'rgba(255,255,255,0.50)' : 'rgba(30,58,95,0.55)';
+    ctx.save();
+    ctx.font = '500 8px Inter, sans-serif';
+    ctx.textBaseline = 'top';
+    lines.forEach(({ idx, label }) => {
+      const x = scales.x.getPixelForValue(idx);
+      if (x < chartArea.left || x > chartArea.right) return;
+      // dashed vertical line
+      ctx.beginPath();
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = lineClr;
+      ctx.lineWidth = 1.2;
+      ctx.moveTo(x, chartArea.top);
+      ctx.lineTo(x, chartArea.bottom);
+      ctx.stroke();
+      // label just below the top edge
+      ctx.setLineDash([]);
+      ctx.fillStyle = textClr;
+      ctx.fillText(label, x + 3, chartArea.top + 4);
+    });
+    ctx.restore();
+  }
+};
+
 let perfChartInstance = null;
 let activeSec = 'all';
 
@@ -1652,57 +1704,6 @@ function downloadPortfolioXLSX() {
   btn.disabled = false;
 }
 
-/* ── Perf chart: week-rebalance vertical lines (custom plugin, no CDN needed) ── */
-const _FF_DATE = new Date('2026-09-04T12:00:00Z');
-
-// Returns array of {idx, label} for each rebalancing Friday found in dates[]
-function buildRebalanceLines(dates) {
-  const lines = [];
-  for (let wk = 2; wk <= 16; wk++) {
-    const weekStart = new Date(_FF_DATE);
-    weekStart.setUTCDate(weekStart.getUTCDate() + 7 * (wk - 1));
-    const iso  = weekStart.toISOString().slice(0, 10);          // "YYYY-MM-DD"
-    const mmdd = iso.slice(5, 7) + '/' + iso.slice(8, 10);      // "MM/DD"
-    // Match 5m-style "09/11 09:30" or daily-style "2026-09-11"
-    const idx = dates.findIndex(lbl => lbl.startsWith(mmdd) || lbl === iso);
-    if (idx === -1) break;   // no more data
-    lines.push({ idx, label: 'Week ' + wk + ' Rebalance' });
-  }
-  return lines;
-}
-
-// Inline Chart.js plugin — draws dashed vertical lines + small labels
-const rebalanceLinesPlugin = {
-  id: 'rebalanceLines',
-  afterDraw(chart) {
-    const { ctx, chartArea, scales, data } = chart;
-    if (!chartArea || !scales.x) return;
-    const lines = buildRebalanceLines(data.labels || []);
-    if (!lines.length) return;
-    const lineClr = isDark ? 'rgba(255,255,255,0.28)' : 'rgba(30,58,95,0.22)';
-    const textClr = isDark ? 'rgba(255,255,255,0.50)' : 'rgba(30,58,95,0.55)';
-    ctx.save();
-    ctx.font = '500 8px Inter, sans-serif';
-    ctx.textBaseline = 'top';
-    lines.forEach(({ idx, label }) => {
-      const x = scales.x.getPixelForValue(idx);
-      if (x < chartArea.left || x > chartArea.right) return;
-      // dashed vertical line
-      ctx.beginPath();
-      ctx.setLineDash([4, 3]);
-      ctx.strokeStyle = lineClr;
-      ctx.lineWidth = 1.2;
-      ctx.moveTo(x, chartArea.top);
-      ctx.lineTo(x, chartArea.bottom);
-      ctx.stroke();
-      // label just below the top edge
-      ctx.setLineDash([]);
-      ctx.fillStyle = textClr;
-      ctx.fillText(label, x + 3, chartArea.top + 4);
-    });
-    ctx.restore();
-  }
-};
 </script>
 </body>
 </html>
