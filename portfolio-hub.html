@@ -1095,7 +1095,7 @@ async function renderAdmin(){
       <div class="r2" style="margin-bottom:12px">
         <div class="f">
           <label>Week</label>
-          <select id="ov-week" style="font-size:14px">
+          <select id="ov-week" onchange="ovLoadSubmission()" style="font-size:14px">
             ${Array.from({length:activeWeek},(_,i)=>i+1).map(w=>`<option value="${w}"${w===activeWeek?' selected':''}>Week ${w}</option>`).join('')}
           </select>
         </div>
@@ -1108,7 +1108,7 @@ async function renderAdmin(){
         </div>
         <div class="f">
           <label>Team</label>
-          <select id="ov-team" style="font-size:14px">
+          <select id="ov-team" onchange="ovLoadSubmission()" style="font-size:14px">
             <option value="">— Select section first —</option>
           </select>
         </div>
@@ -1513,21 +1513,11 @@ async function saveCfg(){
 function ovPopulateTeams(){
   const sec=Number($('ov-sec').value);
   const sel=$('ov-team');
+  $('ov-etfs').innerHTML=''; $('ov-total').textContent='0%'; $('ov-msg').innerHTML='';
   if(!sec){sel.innerHTML='<option value="">— Select section first —</option>';return;}
   const n=sectionsConfig[sec]||10;
   sel.innerHTML='<option value="">— Team —</option>'+
     Array.from({length:n},(_,i)=>`<option value="${i+1}">S${sec}-T${i+1}</option>`).join('');
-  // Build ETF inputs
-  const active=activeEtfs(weekCfg);
-  $('ov-etfs').innerHTML=active.map(e=>`
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">
-      <span style="width:52px;font-weight:700;font-size:13px;color:${e.color}">${e.id}</span>
-      <input type="number" id="ov-${e.id}" min="0" max="100" step="1" value="0"
-        style="width:72px;font-size:14px;text-align:right" oninput="ovUpdateTotal()">
-      <span style="font-size:12px;color:#5A6E8A">%</span>
-      <span style="font-size:11px;color:#5A6E8A;flex:1">${e.name}</span>
-    </div>`).join('');
-  ovUpdateTotal();
 }
 
 function ovUpdateTotal(){
@@ -1535,6 +1525,66 @@ function ovUpdateTotal(){
   const tot=active.reduce((s,e)=>s+(Number($('ov-'+e.id)?.value)||0),0);
   const el=$('ov-total');
   if(el){el.textContent=tot+'%';el.style.color=tot===100?'#059669':tot>100?'#DC2626':'#1E3A5F';}
+}
+
+async function ovLoadSubmission(){
+  const wk=Number($('ov-week').value)||activeWeek;
+  const sec=Number($('ov-sec').value);
+  const tm=Number($('ov-team').value);
+  const etfsEl=$('ov-etfs'); const msgEl=$('ov-msg');
+  if(!sec||!tm){ if(etfsEl)etfsEl.innerHTML=''; return; }
+
+  if(msgEl)msgEl.innerHTML='<div class="msg in" style="font-size:12px">Loading…</div>';
+
+  // Load week config for selected week
+  let wkCfg=weekCfg; // default to active week config
+  try{
+    if(wk!==activeWeek){
+      const wcd=await fs.doc(`config/week_cfg_${wk}`).get();
+      if(wcd.exists){
+        const d=wcd.data();
+        wkCfg={activeAssets:d.activeAssets||[...DEFAULT_ACTIVE],globalMin:d.globalMin||0,globalMax:d.globalMax||100};
+      }
+    }
+  }catch(_){}
+
+  // Load existing submission
+  let existing=null;
+  try{
+    const snap=await fs.doc(`submissions/S${sec}-T${tm}-W${wk}`).get();
+    if(snap.exists) existing=snap.data();
+  }catch(_){}
+
+  // Build ETF inputs for that week's active assets
+  const active=activeEtfs(wkCfg);
+  const gMin=wkCfg.globalMin||0, gMax=wkCfg.globalMax||100;
+
+  let statusHtml='';
+  if(existing){
+    const ts=existing.submittedAt?new Date(existing.submittedAt).toLocaleString():'unknown';
+    const isOverride=existing.instructorOverride?'<span style="color:#D97706"> · instructor override</span>':'';
+    statusHtml=`<div class="msg wn" style="font-size:12px;margin-bottom:10px">
+      ⚠ <strong>Existing submission found</strong> (submitted ${ts}${isOverride}) — loaded below. Submitting will <strong>replace</strong> it.
+    </div>`;
+  } else {
+    statusHtml=`<div class="msg er" style="font-size:12px;margin-bottom:10px">
+      ❌ <strong>No allocation found</strong> for S${sec}-T${tm} Week ${wk}. Fill in below to create one.
+    </div>`;
+  }
+
+  const alloc=existing?.allocations||{};
+  etfsEl.innerHTML=statusHtml+active.map(e=>{
+    const val=alloc[e.id]??0;
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">
+      <span style="width:52px;font-weight:700;font-size:13px;color:${e.color}">${e.id}</span>
+      <input type="number" id="ov-${e.id}" min="${gMin}" max="${gMax}" step="1" value="${val}"
+        style="width:72px;font-size:14px;text-align:right" oninput="ovUpdateTotal()">
+      <span style="font-size:12px;color:#5A6E8A">%</span>
+      <span style="font-size:11px;color:#5A6E8A;flex:1">${e.name}</span>
+    </div>`;
+  }).join('');
+  if(msgEl)msgEl.innerHTML='';
+  ovUpdateTotal();
 }
 
 async function doOverride(){
@@ -1545,8 +1595,9 @@ async function doOverride(){
   const msg=$('ov-msg');
   if(!sec||!tm){if(msg)msg.innerHTML='<div class="msg er">Select section and team.</div>';return;}
   if(!note){if(msg)msg.innerHTML='<div class="msg er">Enter a note explaining this override.</div>';return;}
-  const active=activeEtfs(weekCfg);
-  const alloc=Object.fromEntries(active.map(e=>[e.id,Number($('ov-'+e.id)?.value)||0]));
+  // Collect values from whatever ETF inputs are currently rendered
+  const renderedInputs=[...document.querySelectorAll('#ov-etfs input[id^="ov-"]')];
+  const alloc=Object.fromEntries(renderedInputs.map(inp=>[inp.id.replace('ov-',''),Number(inp.value)||0]));
   const tot=Object.values(alloc).reduce((s,v)=>s+v,0);
   if(tot!==100){if(msg)msg.innerHTML=`<div class="msg er">Total is ${tot}% — must be exactly 100%.</div>`;return;}
   const btn=document.querySelector('[onclick="doOverride()"]');
