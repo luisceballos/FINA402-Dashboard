@@ -1094,6 +1094,12 @@ async function renderAdmin(){
       </p>
       <div class="r2" style="margin-bottom:12px">
         <div class="f">
+          <label>Week</label>
+          <select id="ov-week" style="font-size:14px">
+            ${Array.from({length:activeWeek},(_,i)=>i+1).map(w=>`<option value="${w}"${w===activeWeek?' selected':''}>Week ${w}</option>`).join('')}
+          </select>
+        </div>
+        <div class="f">
           <label>Section</label>
           <select id="ov-sec" onchange="ovPopulateTeams()" style="font-size:14px">
             <option value="">— Section —</option>
@@ -1118,7 +1124,7 @@ async function renderAdmin(){
         <input type="text" id="ov-note" placeholder="e.g. Late submission — entered by instructor" style="font-size:13px">
       </div>
       <div id="ov-msg" style="margin-bottom:8px"></div>
-      <button class="btn bp-" onclick="doOverride()">📝 Submit Override for Week ${activeWeek}</button>
+      <button class="btn bp-" onclick="doOverride()">📝 Submit Override</button>
     </div>
   </div>
 
@@ -1534,6 +1540,7 @@ function ovUpdateTotal(){
 async function doOverride(){
   const sec=Number($('ov-sec').value);
   const tm=Number($('ov-team').value);
+  const wk=Number($('ov-week').value)||activeWeek;
   const note=($('ov-note')?.value||'').trim();
   const msg=$('ov-msg');
   if(!sec||!tm){if(msg)msg.innerHTML='<div class="msg er">Select section and team.</div>';return;}
@@ -1545,22 +1552,23 @@ async function doOverride(){
   const btn=document.querySelector('[onclick="doOverride()"]');
   if(btn){btn.disabled=true;btn.textContent='Saving…';}
   try{
-    await fs.doc(`submissions/S${sec}-T${tm}-W${activeWeek}`).set({
-      section:sec,team:tm,week:activeWeek,
+    await fs.doc(`submissions/S${sec}-T${tm}-W${wk}`).set({
+      section:sec,team:tm,week:wk,
       allocations:alloc,
       rationale:`[INSTRUCTOR OVERRIDE] ${note}`,
       submittedAt:new Date().toISOString(),
       instructorOverride:true,
       overrideNote:note,
     });
-    if(msg)msg.innerHTML=`<div class="msg ok">✓ Override saved for S${sec}-T${tm} Week ${activeWeek}. Marked as instructor override.</div>`;
+    if(msg)msg.innerHTML=`<div class="msg ok">✓ Override saved for S${sec}-T${tm} Week ${wk}. Marked as instructor override.</div>`;
     $('ov-sec').value=''; $('ov-team').innerHTML='<option value="">— Select section first —</option>';
     $('ov-etfs').innerHTML=''; $('ov-note').value=''; $('ov-total').textContent='0%';
+    $('ov-week').value=activeWeek;
     renderAdmin();
   }catch(e){
     if(msg)msg.innerHTML=`<div class="msg er">Error: ${e.message}</div>`;
   }
-  if(btn){btn.disabled=false;btn.textContent='📝 Submit Override for Week ${activeWeek}';}
+  if(btn){btn.disabled=false;btn.textContent='📝 Submit Override';}
 }
 
 async function toggleWeekOpen(open){
