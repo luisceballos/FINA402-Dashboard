@@ -1083,6 +1083,46 @@ async function renderAdmin(){
   </div>
 
   <div class="card">
+    <div class="ct" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center"
+         onclick="$('override-body').hidden=!$('override-body').hidden">
+      📝 Override Team Submission
+      <span style="font-size:11px;font-weight:400;color:#5A6E8A">▼ expand</span>
+    </div>
+    <div id="override-body" hidden>
+      <p style="font-size:12px;color:#5A6E8A;margin:10px 0 14px">
+        Use this when a group missed the deadline. Enters an allocation on their behalf and marks it as a late instructor override.
+      </p>
+      <div class="r2" style="margin-bottom:12px">
+        <div class="f">
+          <label>Section</label>
+          <select id="ov-sec" onchange="ovPopulateTeams()" style="font-size:14px">
+            <option value="">— Section —</option>
+            ${[1,2,3,4].map(s=>`<option value="${s}">Section ${s}</option>`).join('')}
+          </select>
+        </div>
+        <div class="f">
+          <label>Team</label>
+          <select id="ov-team" style="font-size:14px">
+            <option value="">— Select section first —</option>
+          </select>
+        </div>
+      </div>
+      <div id="ov-etfs" style="margin-bottom:12px"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;
+                  padding:8px 12px;background:#F5F7FB;border-radius:6px;margin-bottom:10px">
+        <span style="font-size:13px;font-weight:600;color:#1E3A5F">Total</span>
+        <span id="ov-total" style="font-size:15px;font-weight:700;color:#1E3A5F">0%</span>
+      </div>
+      <div class="f" style="margin-bottom:12px">
+        <label>Note <span style="font-weight:400;font-size:11px;color:#5A6E8A">(required — reason for override)</span></label>
+        <input type="text" id="ov-note" placeholder="e.g. Late submission — entered by instructor" style="font-size:13px">
+      </div>
+      <div id="ov-msg" style="margin-bottom:8px"></div>
+      <button class="btn bp-" onclick="doOverride()">📝 Submit Override for Week ${activeWeek}</button>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="ct">Week ${activeWeek} — Available Assets &amp; Constraint</div>
     <p style="font-size:12px;color:#5A6E8A;margin-bottom:14px">Select ETFs available this week and set an optional global min/max that applies to every ETF equally.</p>
     <div class="con-box">
@@ -1462,6 +1502,65 @@ async function saveCfg(){
     weekCfg={...adminCfg};
     if(m)m.innerHTML=`<div class="msg ok">✓ Saved — ${adminCfg.activeAssets.length} ETFs, constraint ${gMin}–${gMax}%.</div>`;
   }catch(err){if(m)m.innerHTML=`<div class="msg er">Error saving: ${err.message}</div>`;}
+}
+
+function ovPopulateTeams(){
+  const sec=Number($('ov-sec').value);
+  const sel=$('ov-team');
+  if(!sec){sel.innerHTML='<option value="">— Select section first —</option>';return;}
+  const n=sectionsConfig[sec]||10;
+  sel.innerHTML='<option value="">— Team —</option>'+
+    Array.from({length:n},(_,i)=>`<option value="${i+1}">S${sec}-T${i+1}</option>`).join('');
+  // Build ETF inputs
+  const active=activeEtfs(weekCfg);
+  $('ov-etfs').innerHTML=active.map(e=>`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">
+      <span style="width:52px;font-weight:700;font-size:13px;color:${e.color}">${e.id}</span>
+      <input type="number" id="ov-${e.id}" min="0" max="100" step="1" value="0"
+        style="width:72px;font-size:14px;text-align:right" oninput="ovUpdateTotal()">
+      <span style="font-size:12px;color:#5A6E8A">%</span>
+      <span style="font-size:11px;color:#5A6E8A;flex:1">${e.name}</span>
+    </div>`).join('');
+  ovUpdateTotal();
+}
+
+function ovUpdateTotal(){
+  const active=activeEtfs(weekCfg);
+  const tot=active.reduce((s,e)=>s+(Number($('ov-'+e.id)?.value)||0),0);
+  const el=$('ov-total');
+  if(el){el.textContent=tot+'%';el.style.color=tot===100?'#059669':tot>100?'#DC2626':'#1E3A5F';}
+}
+
+async function doOverride(){
+  const sec=Number($('ov-sec').value);
+  const tm=Number($('ov-team').value);
+  const note=($('ov-note')?.value||'').trim();
+  const msg=$('ov-msg');
+  if(!sec||!tm){if(msg)msg.innerHTML='<div class="msg er">Select section and team.</div>';return;}
+  if(!note){if(msg)msg.innerHTML='<div class="msg er">Enter a note explaining this override.</div>';return;}
+  const active=activeEtfs(weekCfg);
+  const alloc=Object.fromEntries(active.map(e=>[e.id,Number($('ov-'+e.id)?.value)||0]));
+  const tot=Object.values(alloc).reduce((s,v)=>s+v,0);
+  if(tot!==100){if(msg)msg.innerHTML=`<div class="msg er">Total is ${tot}% — must be exactly 100%.</div>`;return;}
+  const btn=document.querySelector('[onclick="doOverride()"]');
+  if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{
+    await fs.doc(`submissions/S${sec}-T${tm}-W${activeWeek}`).set({
+      section:sec,team:tm,week:activeWeek,
+      allocations:alloc,
+      rationale:`[INSTRUCTOR OVERRIDE] ${note}`,
+      submittedAt:new Date().toISOString(),
+      instructorOverride:true,
+      overrideNote:note,
+    });
+    if(msg)msg.innerHTML=`<div class="msg ok">✓ Override saved for S${sec}-T${tm} Week ${activeWeek}. Marked as instructor override.</div>`;
+    $('ov-sec').value=''; $('ov-team').innerHTML='<option value="">— Select section first —</option>';
+    $('ov-etfs').innerHTML=''; $('ov-note').value=''; $('ov-total').textContent='0%';
+    renderAdmin();
+  }catch(e){
+    if(msg)msg.innerHTML=`<div class="msg er">Error: ${e.message}</div>`;
+  }
+  if(btn){btn.disabled=false;btn.textContent='📝 Submit Override for Week ${activeWeek}';}
 }
 
 async function toggleWeekOpen(open){
