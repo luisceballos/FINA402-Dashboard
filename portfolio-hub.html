@@ -374,9 +374,13 @@ async function doTeamLogin(){
     const rec=teamPasswords[teamKey];
     if(!rec){$('lm-msg').innerHTML='<div class="msg er">Team not found. Contact your instructor.</div>';btn.disabled=false;btn.textContent='Log In';return;}
     if(rec.hash!==h){$('lm-msg').innerHTML='<div class="msg er">Incorrect password.</div>';btn.disabled=false;btn.textContent='Log In';return;}
-    // Success — check mustChange
+    // Success — check section open before proceeding
     const m=teamKey.match(/^S(\d+)-T(\d+)$/);
     const sess={team:teamKey,section:Number(m[1]),teamNum:Number(m[2]),passHash:h};
+    if(sectionControl[sess.section]===false){
+      $('lm-msg').innerHTML='<div class="msg er" style="text-align:left">🔒 <strong>Week not active yet for your section.</strong><br>Your instructor will open it in class.</div>';
+      btn.disabled=false; btn.textContent='Log In'; return;
+    }
     if(rec.mustChange){
       teamSession=sess;
       showChangePassModal(true);
@@ -1068,6 +1072,75 @@ async function renderAdmin(){
   </div>
 
   <div class="card">
+    <div class="ct" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center"
+         onclick="$('override-body').hidden=!$('override-body').hidden">
+      📝 Override Team Submission
+      <span style="font-size:11px;font-weight:400;color:#5A6E8A">▼ expand</span>
+    </div>
+    <div id="override-body" hidden>
+      <p style="font-size:12px;color:#5A6E8A;margin:10px 0 14px">
+        Use this when a group missed the deadline. Enters an allocation on their behalf and marks it as an instructor override.
+      </p>
+      <div class="r2" style="margin-bottom:12px">
+        <div class="f">
+          <label>Week</label>
+          <select id="ov-week" onchange="ovLoadSubmission()" style="font-size:14px">
+            ${Array.from({length:activeWeek},(_,i)=>i+1).map(w=>`<option value="${w}"${w===activeWeek?' selected':''}>Week ${w}</option>`).join('')}
+          </select>
+        </div>
+        <div class="f">
+          <label>Section</label>
+          <select id="ov-sec" onchange="ovPopulateTeams()" style="font-size:14px">
+            <option value="">— Section —</option>
+            ${[1,2,3,4].map(s=>`<option value="${s}">Section ${s}</option>`).join('')}
+          </select>
+        </div>
+        <div class="f">
+          <label>Team</label>
+          <select id="ov-team" onchange="ovLoadSubmission()" style="font-size:14px">
+            <option value="">— Select section first —</option>
+          </select>
+        </div>
+      </div>
+      <div id="ov-etfs" style="margin-bottom:12px"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;
+                  padding:8px 12px;background:#F5F7FB;border-radius:6px;margin-bottom:10px">
+        <span style="font-size:13px;font-weight:600;color:#1E3A5F">Total</span>
+        <span id="ov-total" style="font-size:15px;font-weight:700;color:#1E3A5F">0%</span>
+      </div>
+      <div class="f" style="margin-bottom:12px">
+        <label>Note <span style="font-weight:400;font-size:11px;color:#5A6E8A">(required — reason for override)</span></label>
+        <input type="text" id="ov-note" placeholder="e.g. Late submission — entered by instructor" style="font-size:13px">
+      </div>
+      <div id="ov-msg" style="margin-bottom:8px"></div>
+      <button class="btn bp-" onclick="doOverride()">📝 Submit Override</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ct" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center"
+         onclick="$('missing-body').hidden=!$('missing-body').hidden">
+      📋 Missing Submissions Report
+      <span style="font-size:11px;font-weight:400;color:#5A6E8A">▼ expand</span>
+    </div>
+    <div id="missing-body" hidden>
+      <p style="font-size:12px;color:#5A6E8A;margin:10px 0 14px">
+        Ver qué grupos no enviaron en una semana. Click <strong>→ Override</strong> en un grupo faltante para llenarlo con nota de penalización.
+      </p>
+      <div style="display:flex;align-items:flex-end;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+        <div class="f" style="margin-bottom:0;flex:0 0 auto">
+          <label>Week to check</label>
+          <select id="rpt-week" style="font-size:14px">
+            ${Array.from({length:activeWeek},(_,i)=>i+1).map(w=>`<option value="${w}"${w===Math.max(1,activeWeek-1)?' selected':''}>Week ${w}</option>`).join('')}
+          </select>
+        </div>
+        <button class="btn bp-" style="padding:7px 18px;font-size:13px;flex:0 0 auto" onclick="loadMissingReport()">Load Report</button>
+      </div>
+      <div id="rpt-out"></div>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="ct">Week ${activeWeek} — Available Assets &amp; Constraint</div>
     <p style="font-size:12px;color:#5A6E8A;margin-bottom:14px">Select ETFs available this week and set an optional global min/max that applies to every ETF equally.</p>
     <div class="con-box">
@@ -1429,6 +1502,180 @@ function onChkChange(id){
   if(chk?.checked){if(!adminCfg.activeAssets.includes(id))adminCfg.activeAssets.push(id);
   }else{adminCfg.activeAssets=adminCfg.activeAssets.filter(x=>x!==id);}
   updateCfgCounter(); buildSliders('asg',adminAlloc,adminCfg,true);
+}
+
+/* ── Override helpers ── */
+function ovPopulateTeams(){
+  const sec=Number($('ov-sec').value);
+  const sel=$('ov-team');
+  $('ov-etfs').innerHTML=''; $('ov-total').textContent='0%';
+  if($('ov-msg'))$('ov-msg').innerHTML='';
+  if(!sec){sel.innerHTML='<option value="">— Select section first —</option>';return;}
+  const n=sectionsConfig[sec]||10;
+  sel.innerHTML='<option value="">— Team —</option>'+
+    Array.from({length:n},(_,i)=>`<option value="${i+1}">S${sec}-T${i+1}</option>`).join('');
+}
+
+function ovUpdateTotal(){
+  const inputs=[...document.querySelectorAll('#ov-etfs input[id^="ov-"]')];
+  const tot=inputs.reduce((s,inp)=>s+(Number(inp.value)||0),0);
+  const el=$('ov-total');
+  if(el){el.textContent=tot+'%';el.style.color=tot===100?'#059669':tot>100?'#DC2626':'#1E3A5F';}
+}
+
+async function ovLoadSubmission(){
+  const wk=Number($('ov-week').value)||activeWeek;
+  const sec=Number($('ov-sec').value);
+  const tm=Number($('ov-team').value);
+  const etfsEl=$('ov-etfs'); const msgEl=$('ov-msg');
+  if(!sec||!tm){if(etfsEl)etfsEl.innerHTML='';return;}
+  if(msgEl)msgEl.innerHTML='<div class="msg in" style="font-size:12px">Loading…</div>';
+  let wkCfg=weekCfg;
+  try{
+    if(wk!==activeWeek){
+      const wcd=await fs.doc(`config/week_cfg_${wk}`).get();
+      if(wcd.exists){
+        const d=wcd.data();
+        wkCfg={activeAssets:d.activeAssets||[...DEFAULT_ACTIVE],globalMin:d.globalMin||0,globalMax:d.globalMax||100};
+      }
+    }
+  }catch(_){}
+  let existing=null;
+  try{
+    const snap=await fs.doc(`submissions/S${sec}-T${tm}-W${wk}`).get();
+    if(snap.exists)existing=snap.data();
+  }catch(_){}
+  const active=activeEtfs(wkCfg);
+  const gMin=wkCfg.globalMin||0, gMax=wkCfg.globalMax||100;
+  let statusHtml='';
+  if(existing){
+    const ts=existing.submittedAt?new Date(existing.submittedAt).toLocaleString():'unknown';
+    const isOv=existing.instructorOverride?'<span style="color:#D97706"> · instructor override</span>':'';
+    const penNote=existing.overrideNote?`<br><em style="color:#5A6E8A;font-size:11px">Note: ${existing.overrideNote}</em>`:'';
+    statusHtml=`<div class="msg wn">⚠ <strong>Existing submission found</strong> (submitted ${ts}${isOv})${penNote} — loaded below. Submitting will <strong>replace</strong> it.</div>`;
+  }else{
+    statusHtml=`<div class="msg er">❌ <strong>No allocation found</strong> for S${sec}-T${tm} Week ${wk}. Fill in below to create one.</div>`;
+  }
+  const alloc=existing?.allocations||{};
+  if(etfsEl)etfsEl.innerHTML=statusHtml+active.map(e=>{
+    const val=alloc[e.id]??0;
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">
+      <span style="width:52px;font-weight:700;font-size:13px;color:${e.color}">${e.id}</span>
+      <input type="number" id="ov-${e.id}" min="${gMin}" max="${gMax}" step="1" value="${val}"
+        style="width:72px;font-size:14px;text-align:right" oninput="ovUpdateTotal()">
+      <span style="font-size:12px;color:#5A6E8A">%</span>
+      <span style="font-size:11px;color:#5A6E8A;flex:1">${e.name}</span>
+    </div>`;
+  }).join('');
+  if(msgEl)msgEl.innerHTML='';
+  ovUpdateTotal();
+}
+
+async function doOverride(){
+  const sec=Number($('ov-sec').value);
+  const tm=Number($('ov-team').value);
+  const wk=Number($('ov-week').value)||activeWeek;
+  const note=($('ov-note')?.value||'').trim();
+  const msg=$('ov-msg');
+  if(!sec||!tm){if(msg)msg.innerHTML='<div class="msg er">Select section and team.</div>';return;}
+  if(!note){if(msg)msg.innerHTML='<div class="msg er">Enter a note explaining this override.</div>';return;}
+  const renderedInputs=[...document.querySelectorAll('#ov-etfs input[id^="ov-"]')];
+  const alloc=Object.fromEntries(renderedInputs.map(inp=>[inp.id.replace('ov-',''),Number(inp.value)||0]));
+  const tot=Object.values(alloc).reduce((s,v)=>s+v,0);
+  if(tot!==100){if(msg)msg.innerHTML=`<div class="msg er">Total is ${tot}% — must be exactly 100%.</div>`;return;}
+  const btn=document.querySelector('[onclick="doOverride()"]');
+  if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{
+    await fs.doc(`submissions/S${sec}-T${tm}-W${wk}`).set({
+      section:sec,team:tm,week:wk,
+      allocations:alloc,
+      rationale:`[INSTRUCTOR OVERRIDE] ${note}`,
+      submittedAt:new Date().toISOString(),
+      instructorOverride:true,
+      overrideNote:note,
+    });
+    if(msg)msg.innerHTML=`<div class="msg ok">✓ Override saved for S${sec}-T${tm} Week ${wk}.</div>`;
+    $('ov-sec').value='';
+    $('ov-team').innerHTML='<option value="">— Select section first —</option>';
+    $('ov-etfs').innerHTML=''; $('ov-note').value=''; $('ov-total').textContent='0%';
+    $('ov-week').value=activeWeek;
+  }catch(e){
+    if(msg)msg.innerHTML=`<div class="msg er">Error: ${e.message}</div>`;
+  }
+  if(btn){btn.disabled=false;btn.textContent='📝 Submit Override';}
+}
+
+/* ── Missing Submissions Report ── */
+async function loadMissingReport(){
+  const wk=Number($('rpt-week')?.value)||activeWeek;
+  const out=$('rpt-out');
+  if(!out)return;
+  out.innerHTML='<div class="msg in" style="font-size:12px">Loading submissions…</div>';
+  let submitted=new Set();
+  try{
+    const sn=await fs.collection('submissions').where('week','==',wk).get();
+    sn.docs.forEach(d=>{const dd=d.data();submitted.add(`S${dd.section}-T${dd.team}`);
+    });
+  }catch(e){out.innerHTML=`<div class="msg er">Error: ${e.message}</div>`;return;}
+  let totalMissing=0,totalPresent=0;
+  let html='';
+  [1,2,3,4].forEach(sec=>{
+    const n=sectionsConfig[sec]||10;
+    let rows='';
+    for(let tm=1;tm<=n;tm++){
+      const key=`S${sec}-T${tm}`;
+      const present=submitted.has(key);
+      if(present)totalPresent++;else totalMissing++;
+      const badge=present
+        ?`<span style="color:#059669;font-weight:700;font-size:13px">✓ Submitted</span>`
+        :`<span style="color:#DC2626;font-weight:700;font-size:13px">✗ Missing</span>`;
+      const action=present?'':`<button class="btn" style="font-size:11px;padding:3px 10px;border-color:#1E3A5F;color:#1E3A5F" onclick="jumpToOverride(${wk},${sec},${tm})">→ Override</button>`;
+      rows+=`<tr>
+        <td style="padding:5px 8px;font-weight:600;font-size:13px;color:#1E3A5F">S${sec}-T${tm}</td>
+        <td style="padding:5px 8px">${badge}</td>
+        <td style="padding:5px 8px;text-align:right">${action}</td>
+      </tr>`;
+    }
+    html+=`<div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:#1E3A5F;letter-spacing:.05em;text-transform:uppercase;
+                  padding:5px 10px;background:#F5F7FB;border-radius:5px;margin-bottom:6px">Section ${sec}</div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);color:#5A6E8A;font-size:11px;font-weight:600">Team</th>
+          <th style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);color:#5A6E8A;font-size:11px;font-weight:600">Status</th>
+          <th style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border);color:#5A6E8A;font-size:11px;font-weight:600">Action</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  });
+  const summary=`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+    <div style="flex:1;min-width:110px;background:rgba(5,150,105,.08);border:1.5px solid rgba(5,150,105,.3);border-radius:7px;padding:10px 14px;text-align:center">
+      <div style="font-size:22px;font-weight:700;color:#059669">${totalPresent}</div>
+      <div style="font-size:11px;color:#5A6E8A;margin-top:2px">Submitted</div>
+    </div>
+    <div style="flex:1;min-width:110px;background:rgba(220,38,38,.08);border:1.5px solid rgba(220,38,38,.3);border-radius:7px;padding:10px 14px;text-align:center">
+      <div style="font-size:22px;font-weight:700;color:#DC2626">${totalMissing}</div>
+      <div style="font-size:11px;color:#5A6E8A;margin-top:2px">Missing</div>
+    </div>
+  </div>`;
+  out.innerHTML=`<div style="font-size:12px;font-weight:600;color:#5A6E8A;margin-bottom:10px">Week ${wk} — ${totalPresent+totalMissing} teams total</div>`+summary+html;
+}
+
+function jumpToOverride(wk,sec,tm){
+  const body=$('override-body');
+  if(body)body.hidden=false;
+  if(body)body.scrollIntoView({behavior:'smooth',block:'start'});
+  setTimeout(()=>{
+    const wkSel=$('ov-week');if(wkSel)wkSel.value=wk;
+    const secSel=$('ov-sec');if(secSel){secSel.value=sec;ovPopulateTeams();}
+    setTimeout(()=>{
+      const tmSel=$('ov-team');if(tmSel)tmSel.value=tm;
+      const noteInp=$('ov-note');
+      if(noteInp&&!noteInp.value)noteInp.value=`Holdover — no Week ${wk} submission. Penalized.`;
+      ovLoadSubmission();
+    },50);
+  },50);
 }
 
 async function saveCfg(){
