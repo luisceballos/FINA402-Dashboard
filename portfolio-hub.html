@@ -738,19 +738,48 @@ async function onTC(){
         </div>`;
       }
     } else {
-      // No submission yet — reset sliders to 0 and re-enable inputs
-      activeEtfs(weekCfg).forEach(e=>{
-        userAlloc[e.id]=0;
-        const r=document.querySelector(`#sg input[type=range][oninput*="'${e.id}'"]`);
-        if(r){r.value=0;r.disabled=false;}
-        const n=$(`uni-${e.id}`); if(n){n.value=0;n.disabled=false;}
-        const p=$(`upc-${e.id}`); if(p)p.textContent='0%';
-      });
-      const rat=$('rat'); if(rat){rat.value='';rat.disabled=false;}
-      updTotal(); if(aiAlloc)updCmp();
-      if(idm)idm.innerHTML='';
+      // No submission yet — try to load previous week as starting point
       if(badge)badge.innerHTML='';
       if(btn){btn.disabled=false;btn.textContent='Submit Allocation';}
+      const enableSliders=()=>{
+        activeEtfs(weekCfg).forEach(e=>{
+          const r=document.querySelector(`#sg input[type=range][oninput*="'${e.id}'"]`);
+          if(r)r.disabled=false;
+          const n=$(`uni-${e.id}`); if(n)n.disabled=false;
+        });
+        const rat=$('rat'); if(rat)rat.disabled=false;
+      };
+      const applyAlloc=(allocObj,label)=>{
+        activeEtfs(weekCfg).forEach(e=>{
+          const v=Number(allocObj?.[e.id])||0;
+          userAlloc[e.id]=v;
+          const r=document.querySelector(`#sg input[type=range][oninput*="'${e.id}'"]`);
+          if(r){r.value=v;r.disabled=false;}
+          const n=$(`uni-${e.id}`); if(n){n.value=v;n.disabled=false;}
+          const p=$(`upc-${e.id}`); if(p)p.textContent=v+'%';
+        });
+        updTotal(); if(aiAlloc)updCmp();
+        if(idm)idm.innerHTML=label;
+      };
+      if(activeWeek>1){
+        try{
+          const prev=await fs.doc(`submissions/S${sec}-T${tm}-W${activeWeek-1}`).get();
+          if(prev.exists){
+            const pd=prev.data();
+            applyAlloc(pd.allocations,
+              `<div class="msg wn" style="margin-top:10px">📋 <strong>Showing your Week ${activeWeek-1} allocation as starting point.</strong> Adjust and submit when ready.</div>`);
+            const rat=$('rat'); if(rat)rat.value='';
+          }else{
+            applyAlloc({},`<div class="msg in" style="margin-top:10px">No previous submission found — all ETFs start at 0%.</div>`);
+          }
+        }catch(_){
+          applyAlloc({},'');
+          enableSliders();
+        }
+      }else{
+        applyAlloc({},'');
+        enableSliders();
+      }
     }
   }catch(err){
     const idm=$('id-msg');
@@ -1125,7 +1154,7 @@ async function renderAdmin(){
     </div>
     <div id="missing-body" hidden>
       <p style="font-size:12px;color:#5A6E8A;margin:10px 0 14px">
-        Ver qué grupos no enviaron en una semana. Click <strong>→ Override</strong> en un grupo faltante para llenarlo con nota de penalización.
+        Check which teams have not submitted for a given week. Click <strong>→ Override</strong> on any missing team to open the override panel with that team pre-selected.
       </p>
       <div style="display:flex;align-items:flex-end;gap:10px;margin-bottom:14px;flex-wrap:wrap">
         <div class="f" style="margin-bottom:0;flex:0 0 auto">
