@@ -1142,6 +1142,10 @@ async function renderAdmin(){
         <span id="ov-total" style="font-size:15px;font-weight:700;color:#1E3A5F">0%</span>
       </div>
       <div class="f" style="margin-bottom:12px">
+        <label>Rationale <span style="font-weight:400;font-size:11px;color:#5A6E8A">(optional — override or enter the team's strategy rationale)</span></label>
+        <textarea id="ov-rationale" rows="3" placeholder="e.g. Group focused on tech growth given strong earnings momentum…" style="font-size:13px;resize:vertical;min-height:70px"></textarea>
+      </div>
+      <div class="f" style="margin-bottom:12px">
         <label>Note <span style="font-weight:400;font-size:11px;color:#5A6E8A">(required — reason for override)</span></label>
         <input type="text" id="ov-note" placeholder="e.g. Late submission — entered by instructor" style="font-size:13px">
       </div>
@@ -1601,6 +1605,13 @@ async function ovLoadSubmission(){
     </div>`;
   }).join('');
   if(msgEl)msgEl.innerHTML='';
+  // Load existing rationale into the textarea (strip instructor-override prefix if present)
+  const ratEl=$('ov-rationale');
+  if(ratEl){
+    let rat=existing?.rationale||'';
+    if(rat.startsWith('[INSTRUCTOR OVERRIDE] '))rat=rat.slice('[INSTRUCTOR OVERRIDE] '.length);
+    ratEl.value=rat;
+  }
   ovUpdateTotal();
 }
 
@@ -1609,6 +1620,7 @@ async function doOverride(){
   const tm=Number($('ov-team').value);
   const wk=Number($('ov-week').value)||activeWeek;
   const note=($('ov-note')?.value||'').trim();
+  const rationale=($('ov-rationale')?.value||'').trim();
   const msg=$('ov-msg');
   if(!sec||!tm){if(msg)msg.innerHTML='<div class="msg er">Select section and team.</div>';return;}
   if(!note){if(msg)msg.innerHTML='<div class="msg er">Enter a note explaining this override.</div>';return;}
@@ -1622,7 +1634,7 @@ async function doOverride(){
     await fs.doc(`submissions/S${sec}-T${tm}-W${wk}`).set({
       section:sec,team:tm,week:wk,
       allocations:alloc,
-      rationale:`[INSTRUCTOR OVERRIDE] ${note}`,
+      rationale:rationale||`[INSTRUCTOR OVERRIDE] ${note}`,
       submittedAt:new Date().toISOString(),
       instructorOverride:true,
       overrideNote:note,
@@ -1630,7 +1642,9 @@ async function doOverride(){
     if(msg)msg.innerHTML=`<div class="msg ok">✓ Override saved for S${sec}-T${tm} Week ${wk}.</div>`;
     $('ov-sec').value='';
     $('ov-team').innerHTML='<option value="">— Select section first —</option>';
-    $('ov-etfs').innerHTML=''; $('ov-note').value=''; $('ov-total').textContent='0%';
+    $('ov-etfs').innerHTML=''; $('ov-note').value='';
+    if($('ov-rationale'))$('ov-rationale').value='';
+    $('ov-total').textContent='0%';
     $('ov-week').value=activeWeek;
   }catch(e){
     if(msg)msg.innerHTML=`<div class="msg er">Error: ${e.message}</div>`;
