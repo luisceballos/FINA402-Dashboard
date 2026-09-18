@@ -292,7 +292,7 @@ const DEFAULT_ACTIVE = ["SPY", "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLU", 
    activeWeek is auto-computed from today so the hub always shows
    the right week without any manual "advance week" click.
 ──────────────────────────────────────────────────────────────── */
-const _FIRST_OPEN = new Date("2026-09-04"+'T00:00:00Z');  // Sep 4 2026 UTC midnight
+const _FIRST_OPEN = new Date("2026-09-05"+'T00:00:00Z');  // Sep 5 2026 — Sat after first Friday
 function computeActiveWeek() {
   const now = new Date();
   // Use the caller's LOCAL date so the week doesn't roll over at ~4 PM PST (UTC midnight)
@@ -303,8 +303,6 @@ function computeActiveWeek() {
   const days = Math.max(0, Math.floor((todayLocal - firstOpenLocal) / 86400000));
   return 2 + Math.floor(days / 7); // internal week id (Firebase docs W2,W3,W4…)
 }
-// Display week = internal week − 1  (hub stores W2,W3,… but labels them Week 1,2,…)
-function weekLabel(wk) { return wk - 1; }
 
 /* ── state ── */
 let activeWeek=null, adminPw=null;
@@ -515,8 +513,8 @@ async function init(){
 function updateChip(){
   const c=$('wchip');
   if(!activeWeek){c.textContent='Not configured';c.className='wk-chip off';return;}
-  if(!weekCfg.weekOpen){c.textContent=`Week ${weekLabel(activeWeek)} — Closed`;c.className='wk-chip off';return;}
-  c.textContent=`Week ${weekLabel(activeWeek)} — Open`; c.className='wk-chip';
+  if(!weekCfg.weekOpen){c.textContent=`Week ${activeWeek} — Closed`;c.className='wk-chip off';return;}
+  c.textContent=`Week ${activeWeek} — Open`; c.className='wk-chip';
 }
 
 /* ══════════ NOT READY ══════════ */
@@ -537,7 +535,7 @@ function renderForm(){
   if(!weekCfg.weekOpen){
     $('body').innerHTML=`<div class="card" style="text-align:center;padding:40px">
       <div style="font-size:36px;margin-bottom:12px">🔒</div>
-      <p style="font-size:16px;font-weight:600;color:#1E3A5F;margin-bottom:8px">Week ${weekLabel(activeWeek)} is Closed</p>
+      <p style="font-size:16px;font-weight:600;color:#1E3A5F;margin-bottom:8px">Week ${activeWeek} is Closed</p>
       <p style="color:#5A6E8A;font-size:14px">Your instructor has closed submissions for this week. Check back when the next week opens.</p>
     </div>`;
     updateChip(); return;
@@ -548,7 +546,7 @@ function renderForm(){
   const limitNote=(gMin>0||gMax<100)
     ?`<div class="msg wn" style="margin-bottom:13px">⚠ Each ETF must be between <strong>${gMin}%</strong> and <strong>${gMax}%</strong>.</div>`:'' ;
   const aiNote=aiAlloc
-    ?`<div class="msg in" style="margin-bottom:13px"><strong>Week ${weekLabel(activeWeek)} AI Benchmark</strong> shown below each ETF. Allocate exactly 100%.</div>`
+    ?`<div class="msg in" style="margin-bottom:13px"><strong>Week ${activeWeek} AI Benchmark</strong> shown below each ETF. Allocate exactly 100%.</div>`
     :`<div class="msg wn" style="margin-bottom:13px">No AI benchmark set for this week yet. Allocate exactly 100%.</div>`;
 
   $('body').innerHTML=`
@@ -588,7 +586,7 @@ function renderForm(){
 
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px">
-      <div class="ct" style="margin:0">Portfolio Allocation — Week ${weekLabel(activeWeek)}</div>
+      <div class="ct" style="margin:0">Portfolio Allocation — Week ${activeWeek}</div>
       <div id="sub-badge"></div>
     </div>
     <div class="active-chips">${chips}</div>
@@ -731,7 +729,7 @@ async function onTC(){
         if(badge)badge.innerHTML='<span class="sub-badge">✓ Submitted</span>';
         if(btn){btn.disabled=true;btn.textContent='Allocation Locked';}
         if(idm)idm.innerHTML=`<div class="msg ok" style="margin-top:10px">
-          ✅ <strong>Your Week ${weekLabel(activeWeek)} allocation was submitted on ${ts}.</strong>
+          ✅ <strong>Your Week ${activeWeek} allocation was submitted on ${ts}.</strong>
           Contact your instructor if you need to make changes.
         </div>`;
         document.querySelectorAll('#sg input').forEach(el=>el.disabled=true);
@@ -740,7 +738,7 @@ async function onTC(){
         if(badge)badge.innerHTML='<span class="sub-badge" style="background:#FEF3C7;color:#92400E;border-color:#FCD34D">✏ Edit Allowed</span>';
         if(btn){btn.disabled=false;btn.textContent='Update Submission';}
         if(idm)idm.innerHTML=`<div class="msg wn" style="margin-top:10px">
-          ✏ <strong>Your instructor has allowed you to update your Week ${weekLabel(activeWeek)} submission.</strong> Last saved: ${ts}.
+          ✏ <strong>Your instructor has allowed you to update your Week ${activeWeek} submission.</strong> Last saved: ${ts}.
         </div>`;
       }
     } else {
@@ -773,7 +771,7 @@ async function onTC(){
           if(prev.exists){
             const pd=prev.data();
             applyAlloc(pd.allocations,
-              `<div class="msg wn" style="margin-top:10px">📋 <strong>Showing your Week ${weekLabel(activeWeek-1)} allocation as starting point.</strong> Adjust and submit when ready.</div>`);
+              `<div class="msg wn" style="margin-top:10px">📋 <strong>Showing your Week ${activeWeek-1} allocation as starting point.</strong> Adjust and submit when ready.</div>`);
             const rat=$('rat'); if(rat)rat.value='';
           }else{
             applyAlloc({},`<div class="msg in" style="margin-top:10px">No previous submission found — all ETFs start at 0%.</div>`);
@@ -807,11 +805,11 @@ function onSecChange(){
 async function doSubmit(){
   const sec=$('ss')?.value, tm=$('st')?.value, fm=$('fm');
   if(!sec||!tm){if(fm)fm.innerHTML='<div class="msg er">Select your section and team first.</div>';return;}
-  if(!weekCfg.weekOpen){if(fm)fm.innerHTML='<div class="msg er">Week '+weekLabel(activeWeek)+' is closed. Submissions are no longer accepted.</div>';return;}
+  if(!weekCfg.weekOpen){if(fm)fm.innerHTML='<div class="msg er">Week '+activeWeek+' is closed. Submissions are no longer accepted.</div>';return;}
   if(sectionControl[Number(sec)]===false){if(fm)fm.innerHTML='<div class="msg er">Section '+sec+' is currently closed. Your instructor will open submissions during class.</div>';return;}
   if(!weekCfg.allowResubmit){
     const existing=await fs.doc(`submissions/S${sec}-T${tm}-W${activeWeek}`).get();
-    if(existing.exists){if(fm)fm.innerHTML='<div class="msg er">You already submitted Week '+weekLabel(activeWeek)+'. Contact your instructor to make changes.</div>';return;}
+    if(existing.exists){if(fm)fm.innerHTML='<div class="msg er">You already submitted Week '+activeWeek+'. Contact your instructor to make changes.</div>';return;}
   }
   const active=activeEtfs(weekCfg);
   const gMin=weekCfg.globalMin||0, gMax=weekCfg.globalMax||100;
@@ -833,8 +831,8 @@ async function doSubmit(){
       submittedAt:new Date().toISOString(),
     });
     const info=$('success-info');
-    if(info)info.textContent=`Section ${sec} · Team ${tm} · Week ${weekLabel(activeWeek)}`;
-    const sw=$('success-week'); if(sw)sw.textContent=weekLabel(activeWeek);
+    if(info)info.textContent=`Section ${sec} · Team ${tm} · Week ${activeWeek}`;
+    const sw=$('success-week'); if(sw)sw.textContent=activeWeek;
     const sa=$('success-alloc');
     if(sa){
       const lines=Object.entries(allocToSave).filter(([,v])=>v>0)
@@ -1058,15 +1056,15 @@ async function renderAdmin(){
       </div>
     </div>
     <div class="sr2">
-      <div class="sb"><div class="sn">${weekLabel(activeWeek)}</div><div class="sl">Active Week</div></div>
+      <div class="sb"><div class="sn">${activeWeek}</div><div class="sl">Active Week</div></div>
       <div class="sb"><div class="sn">${tot}</div><div class="sl">Total Submissions</div></div>
       ${[1,2,3,4].map(s=>`<div class="sb"><div class="sn">${counts[s]}</div><div class="sl">Section ${s}</div></div>`).join('')}
     </div>
     <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px">
       ${weekCfg.weekOpen
-        ?`<button class="btn bh-" style="border-color:#DC2626;color:#DC2626" onclick="toggleWeekOpen(false)">🔒 Close Week ${weekLabel(activeWeek)}</button>`
-        :`<button class="btn bg-" onclick="toggleWeekOpen(true)">🔓 Re-Open Week ${weekLabel(activeWeek)}</button>`}
-      <button class="btn bg-" onclick="advWeek()">→ Open Week ${weekLabel(activeWeek+1)}</button>
+        ?`<button class="btn bh-" style="border-color:#DC2626;color:#DC2626" onclick="toggleWeekOpen(false)">🔒 Close Week ${activeWeek}</button>`
+        :`<button class="btn bg-" onclick="toggleWeekOpen(true)">🔓 Re-Open Week ${activeWeek}</button>`}
+      <button class="btn bg-" onclick="advWeek()">→ Open Week ${activeWeek+1}</button>
     </div>
     <div style="background:#F5F7FB;border:1.5px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:18px">
       <div style="font-size:11px;font-weight:700;color:#1E3A5F;margin-bottom:10px;letter-spacing:.05em;text-transform:uppercase">Per-Section Submission Control</div>
@@ -1120,7 +1118,7 @@ async function renderAdmin(){
         <div class="f">
           <label>Week</label>
           <select id="ov-week" onchange="ovLoadSubmission()" style="font-size:14px">
-            ${Array.from({length:activeWeek},(_,i)=>i+1).map(w=>`<option value="${w}"${w===activeWeek?' selected':''}>Week ${weekLabel(w)}</option>`).join('')}
+            ${Array.from({length:activeWeek},(_,i)=>i+1).map(w=>`<option value="${w}"${w===activeWeek?' selected':''}>Week ${w}</option>`).join('')}
           </select>
         </div>
         <div class="f">
@@ -1166,7 +1164,7 @@ async function renderAdmin(){
         <div class="f" style="margin-bottom:0;flex:0 0 auto">
           <label>Week to check</label>
           <select id="rpt-week" style="font-size:14px">
-            ${Array.from({length:activeWeek},(_,i)=>i+1).map(w=>`<option value="${w}"${w===Math.max(1,activeWeek-1)?' selected':''}>Week ${weekLabel(w)}</option>`).join('')}
+            ${Array.from({length:activeWeek},(_,i)=>i+1).map(w=>`<option value="${w}"${w===Math.max(1,activeWeek-1)?' selected':''}>Week ${w}</option>`).join('')}
           </select>
         </div>
         <button class="btn bp-" style="padding:7px 18px;font-size:13px;flex:0 0 auto" onclick="loadMissingReport()">Load Report</button>
@@ -1176,7 +1174,7 @@ async function renderAdmin(){
   </div>
 
   <div class="card">
-    <div class="ct">Week ${weekLabel(activeWeek)} — Available Assets &amp; Constraint</div>
+    <div class="ct">Week ${activeWeek} — Available Assets &amp; Constraint</div>
     <p style="font-size:12px;color:#5A6E8A;margin-bottom:14px">Select ETFs available this week and set an optional global min/max that applies to every ETF equally.</p>
     <div class="con-box">
       <div class="f">
@@ -1201,7 +1199,7 @@ async function renderAdmin(){
   </div>
 
   <div class="card">
-    <div class="ct">Week ${weekLabel(activeWeek)} — AI Benchmark Allocation</div>
+    <div class="ct">Week ${activeWeek} — AI Benchmark Allocation</div>
     <div style="background:#F5F7FB;border:1.5px solid #C8D4E8;border-radius:8px;padding:14px 16px;margin-bottom:16px">
       <label style="font-size:12px;font-weight:700;color:#1E3A5F;display:block;margin-bottom:4px">
         🤖 Generate with Claude
@@ -1222,7 +1220,7 @@ async function renderAdmin(){
       <textarea id="arat" style="min-height:75px" placeholder="Explain the reasoning…">${aiRationale}</textarea>
     </div>
     <div id="aim"></div>
-    <button class="btn bp-" onclick="saveAI()" style="margin-top:10px">Save AI Allocation for Week ${weekLabel(activeWeek)}</button>
+    <button class="btn bp-" onclick="saveAI()" style="margin-top:10px">Save AI Allocation for Week ${activeWeek}</button>
   </div>
 
   <div class="card">
@@ -1275,7 +1273,7 @@ async function renderAdmin(){
 
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-      <div class="ct" style="margin:0">📋 Week ${weekLabel(activeWeek)} — Submissions</div>
+      <div class="ct" style="margin:0">📋 Week ${activeWeek} — Submissions</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn bh-" style="padding:5px 12px;font-size:12px" onclick="loadSubmissions()">↻ Refresh</button>
         <button class="btn bg-" style="padding:5px 12px;font-size:12px" onclick="exportCsv()">⬇ Export portfolios.csv</button>
@@ -1329,7 +1327,7 @@ async function loadSubmissions(){
     _usedEtfs = ETFS.filter(e=>etfSet.has(e.id)).map(e=>e.id);
 
     if(_cachedSubs.length===0 && !aiWeekAlloc){
-      wrap.innerHTML='<div class="msg wn" style="font-size:12px">No submissions yet for Week '+weekLabel(activeWeek)+'.</div>';
+      wrap.innerHTML='<div class="msg wn" style="font-size:12px">No submissions yet for Week '+activeWeek+'.</div>';
       return;
     }
 
@@ -1521,7 +1519,7 @@ function buildCfgTable(){
 function updateCfgCounter(){
   const m=$('cfg-msg2');
   if(m)m.innerHTML=`<div class="msg in" style="padding:7px 12px;font-size:12px;margin-bottom:0">
-    <strong>${adminCfg.activeAssets.length}</strong> ETF${adminCfg.activeAssets.length!==1?'s':''} selected for Week ${weekLabel(activeWeek)}.
+    <strong>${adminCfg.activeAssets.length}</strong> ETF${adminCfg.activeAssets.length!==1?'s':''} selected for Week ${activeWeek}.
   </div>`;
 }
 
@@ -1589,7 +1587,7 @@ async function ovLoadSubmission(){
     const penNote=existing.overrideNote?`<br><em style="color:#5A6E8A;font-size:11px">Note: ${existing.overrideNote}</em>`:'';
     statusHtml=`<div class="msg wn">⚠ <strong>Existing submission found</strong> (submitted ${ts}${isOv})${penNote} — loaded below. Submitting will <strong>replace</strong> it.</div>`;
   }else{
-    statusHtml=`<div class="msg er">❌ <strong>No allocation found</strong> for S${sec}-T${tm} Week ${weekLabel(wk)}. Fill in below to create one.</div>`;
+    statusHtml=`<div class="msg er">❌ <strong>No allocation found</strong> for S${sec}-T${tm} Week ${wk}. Fill in below to create one.</div>`;
   }
   const alloc=existing?.allocations||{};
   if(etfsEl)etfsEl.innerHTML=statusHtml+active.map(e=>{
@@ -1629,7 +1627,7 @@ async function doOverride(){
       instructorOverride:true,
       overrideNote:note,
     });
-    if(msg)msg.innerHTML=`<div class="msg ok">✓ Override saved for S${sec}-T${tm} Week ${weekLabel(wk)}.</div>`;
+    if(msg)msg.innerHTML=`<div class="msg ok">✓ Override saved for S${sec}-T${tm} Week ${wk}.</div>`;
     $('ov-sec').value='';
     $('ov-team').innerHTML='<option value="">— Select section first —</option>';
     $('ov-etfs').innerHTML=''; $('ov-note').value=''; $('ov-total').textContent='0%';
@@ -1694,7 +1692,7 @@ async function loadMissingReport(){
       <div style="font-size:11px;color:#5A6E8A;margin-top:2px">Missing</div>
     </div>
   </div>`;
-  out.innerHTML=`<div style="font-size:12px;font-weight:600;color:#5A6E8A;margin-bottom:10px">Week ${weekLabel(wk)} — ${totalPresent+totalMissing} teams total</div>`+summary+html;
+  out.innerHTML=`<div style="font-size:12px;font-weight:600;color:#5A6E8A;margin-bottom:10px">Week ${wk} — ${totalPresent+totalMissing} teams total</div>`+summary+html;
 }
 
 function jumpToOverride(wk,sec,tm){
@@ -1707,7 +1705,7 @@ function jumpToOverride(wk,sec,tm){
     setTimeout(()=>{
       const tmSel=$('ov-team');if(tmSel)tmSel.value=tm;
       const noteInp=$('ov-note');
-      if(noteInp&&!noteInp.value)noteInp.value=`Holdover — no Week ${weekLabel(wk)} submission. Penalized.`;
+      if(noteInp&&!noteInp.value)noteInp.value=`Holdover — no Week ${wk} submission. Penalized.`;
       ovLoadSubmission();
     },50);
   },50);
@@ -1740,7 +1738,7 @@ async function toggleWeekOpen(open){
     },{merge:true});
     weekCfg.weekOpen=open; adminCfg.weekOpen=open;
     const m=$('advm');
-    if(m)m.innerHTML=`<div class="msg ${open?'ok':'wn'}">✓ Week ${weekLabel(activeWeek)} is now <strong>${open?'Open — students can submit':'Closed — submissions blocked'}</strong>.</div>`;
+    if(m)m.innerHTML=`<div class="msg ${open?'ok':'wn'}">✓ Week ${activeWeek} is now <strong>${open?'Open — students can submit':'Closed — submissions blocked'}</strong>.</div>`;
     updateChip(); renderAdmin();
   }catch(err){alert('Error: '+err.message);}
 }
@@ -1788,7 +1786,7 @@ async function toggleResubmit(allowed){
     },{merge:true});
     weekCfg.allowResubmit=allowed; adminCfg.allowResubmit=allowed;
     const m=$('advm');
-    if(m)m.innerHTML=`<div class="msg ok">✓ Resubmissions <strong>${allowed?'enabled':'disabled'}</strong> for Week ${weekLabel(activeWeek)}.</div>`;
+    if(m)m.innerHTML=`<div class="msg ok">✓ Resubmissions <strong>${allowed?'enabled':'disabled'}</strong> for Week ${activeWeek}.</div>`;
   }catch(err){alert('Error: '+err.message);}
 }
 
@@ -1823,7 +1821,7 @@ function openAiModal(){
   const etfList=active.map(e=>`${e.id} (${e.name})`).join(', ');
   const emptyJson=Object.fromEntries(active.map(e=>[e.id,0]));
 
-  const fullPrompt=`You are a portfolio strategy assistant for FINA 402 Investments at USD Knauss School of Business (Week ${weekLabel(activeWeek)}).
+  const fullPrompt=`You are a portfolio strategy assistant for FINA 402 Investments at USD Knauss School of Business (Week ${activeWeek}).
 
 Active ETFs: ${etfList}
 
@@ -1892,7 +1890,7 @@ async function saveAI(){
     await fs.doc(`config/ai_week_${activeWeek}`).set(data);
     aiAlloc={...Object.fromEntries(active.map(e=>[e.id,adminAlloc[e.id]||0]))};
     aiRationale=rat;
-    if(m)m.innerHTML=`<div class="msg ok">✓ AI allocation saved for Week ${weekLabel(activeWeek)}.</div>`;
+    if(m)m.innerHTML=`<div class="msg ok">✓ AI allocation saved for Week ${activeWeek}.</div>`;
   }catch(err){if(m)m.innerHTML=`<div class="msg er">Error: ${err.message}</div>`;}
 }
 
