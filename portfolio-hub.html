@@ -452,6 +452,18 @@ async function init(){
           weekOpen: d.weekOpen !== false,
           allowResubmit: d.allowResubmit===true
         };
+      } else if(activeWeek>2){
+        // No config saved for this week yet — inherit previous week's allowed ETFs as default
+        try{
+          const prev=await fs.doc(`config/week_cfg_${activeWeek-1}`).get();
+          if(prev.exists){
+            const pd=prev.data();
+            weekCfg={
+              activeAssets:pd.activeAssets||[...DEFAULT_ACTIVE],
+              globalMin:0, globalMax:100, weekOpen:true, allowResubmit:false
+            };
+          }
+        }catch(_){}
       }
     }catch(_){}
 
@@ -1658,55 +1670,77 @@ async function loadMissingReport(){
   const out=$('rpt-out');
   if(!out)return;
   out.innerHTML='<div class="msg in" style="font-size:12px">Loading submissions…</div>';
-  let submitted=new Set();
+  // Map key→{instructorOverride, overrideNote} so we can distinguish regular vs override
+  let submittedMap=new Map();
   try{
     const sn=await fs.collection('submissions').where('week','==',wk).get();
-    sn.docs.forEach(d=>{const dd=d.data();submitted.add(`S${dd.section}-T${dd.team}`);
+    sn.docs.forEach(d=>{
+      const dd=d.data();
+      submittedMap.set(`S${dd.section}-T${dd.team}`,{
+        instructorOverride:!!dd.instructorOverride,
+        overrideNote:dd.overrideNote||''
+      });
     });
   }catch(e){out.innerHTML=`<div class="msg er">Error: ${e.message}</div>`;return;}
-  let totalMissing=0,totalPresent=0;
+  let totalMissing=0,totalPresent=0,totalOverride=0;
   let html='';
   [1,2,3,4].forEach(sec=>{
     const n=sectionsConfig[sec]||10;
     let rows='';
     for(let tm=1;tm<=n;tm++){
       const key=`S${sec}-T${tm}`;
-      const present=submitted.has(key);
-      if(present)totalPresent++;else totalMissing++;
-      const badge=present
-        ?`<span style="color:#059669;font-weight:700;font-size:13px">✓ Submitted</span>`
-        :`<span style="color:#DC2626;font-weight:700;font-size:13px">✗ Missing</span>`;
-      const action=present?'':`<button class="btn" style="font-size:11px;padding:3px 10px;border-color:#1E3A5F;color:#1E3A5F" onclick="jumpToOverride(${wk},${sec},${tm})">→ Override</button>`;
-      rows+=`<tr>
-        <td style="padding:5px 8px;font-weight:600;font-size:13px;color:#1E3A5F">S${sec}-T${tm}</td>
-        <td style="padding:5px 8px">${badge}</td>
-        <td style="padding:5px 8px;text-align:right">${action}</td>
+      const rec=submittedMap.get(key);
+      const present=!!rec;
+      const isOv=present&&rec.instructorOverride;
+      if(!present)totalMissing++;
+      else if(isOv)totalOverride++;
+      else totalPresent++;
+      let badge,action='';
+      if(!present){
+        badge=`<span style="color:#DC2626;font-weight:700;font-size:13px">✗ Missing</span>`;
+        action=`<button class="btn" style="font-size:11px;padding:3px 10px;border-color:#1E3A5F;color:#1E3A5F" onclick="jumpToOverride(${wk},${sec},${tm})">→ Override</button>`;
+      }else if(isOv){
+        const noteHtml=rec.overrideNote?`<br><span style="font-size:11px;color:#5A6E8A;font-weight:400">📋 ${rec.overrideNote}</span>`:'';
+        badge=`<span style="color:#D97706;font-weight:700;font-size:13px">📝 Override${noteHtml}</span>`;
+        action=`<button class="btn" style="font-size:11px;padding:3px 10px;border-color:#D97706;color:#D97706" onclick="jumpToOverride(${wk},${sec},${tm})">✎ Edit</button>`;
+      }else{
+        badge=`<span style="color:#059669;font-weight:700;font-size:13px">✓ Submitted</span>`;
+      }
+      rows+=`<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px 8px;font-weight:600;font-size:13px;color:#1E3A5F">S${sec}-T${tm}</td>
+        <td style="padding:6px 8px">${badge}</td>
+        <td style="padding:6px 8px;text-align:right;white-space:nowrap">${action}</td>
       </tr>`;
     }
-    html+=`<div style="margin-bottom:14px">
+    html+=`<div style="margin-bottom:16px">
       <div style="font-size:11px;font-weight:700;color:#1E3A5F;letter-spacing:.05em;text-transform:uppercase;
                   padding:5px 10px;background:#F5F7FB;border-radius:5px;margin-bottom:6px">Section ${sec}</div>
       <table style="width:100%;border-collapse:collapse">
         <thead><tr>
-          <th style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);color:#5A6E8A;font-size:11px;font-weight:600">Team</th>
-          <th style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);color:#5A6E8A;font-size:11px;font-weight:600">Status</th>
-          <th style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border);color:#5A6E8A;font-size:11px;font-weight:600">Action</th>
+          <th style="text-align:left;padding:5px 8px;border-bottom:2px solid var(--border);color:#5A6E8A;font-size:11px;font-weight:600">Team</th>
+          <th style="text-align:left;padding:5px 8px;border-bottom:2px solid var(--border);color:#5A6E8A;font-size:11px;font-weight:600">Status</th>
+          <th style="text-align:right;padding:5px 8px;border-bottom:2px solid var(--border);color:#5A6E8A;font-size:11px;font-weight:600">Action</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
   });
-  const summary=`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
-    <div style="flex:1;min-width:110px;background:rgba(5,150,105,.08);border:1.5px solid rgba(5,150,105,.3);border-radius:7px;padding:10px 14px;text-align:center">
+  const total=totalPresent+totalMissing+totalOverride;
+  const summary=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+    <div style="flex:1;min-width:100px;background:rgba(5,150,105,.08);border:1.5px solid rgba(5,150,105,.3);border-radius:7px;padding:10px 14px;text-align:center">
       <div style="font-size:22px;font-weight:700;color:#059669">${totalPresent}</div>
       <div style="font-size:11px;color:#5A6E8A;margin-top:2px">Submitted</div>
     </div>
-    <div style="flex:1;min-width:110px;background:rgba(220,38,38,.08);border:1.5px solid rgba(220,38,38,.3);border-radius:7px;padding:10px 14px;text-align:center">
+    <div style="flex:1;min-width:100px;background:rgba(217,119,6,.08);border:1.5px solid rgba(217,119,6,.3);border-radius:7px;padding:10px 14px;text-align:center">
+      <div style="font-size:22px;font-weight:700;color:#D97706">${totalOverride}</div>
+      <div style="font-size:11px;color:#5A6E8A;margin-top:2px">Override</div>
+    </div>
+    <div style="flex:1;min-width:100px;background:rgba(220,38,38,.08);border:1.5px solid rgba(220,38,38,.3);border-radius:7px;padding:10px 14px;text-align:center">
       <div style="font-size:22px;font-weight:700;color:#DC2626">${totalMissing}</div>
       <div style="font-size:11px;color:#5A6E8A;margin-top:2px">Missing</div>
     </div>
   </div>`;
-  out.innerHTML=`<div style="font-size:12px;font-weight:600;color:#5A6E8A;margin-bottom:10px">Week ${wk} — ${totalPresent+totalMissing} teams total</div>`+summary+html;
+  out.innerHTML=`<div style="font-size:12px;font-weight:600;color:#5A6E8A;margin-bottom:10px">Week ${wk} — ${total} teams total</div>`+summary+html;
 }
 
 function jumpToOverride(wk,sec,tm){
