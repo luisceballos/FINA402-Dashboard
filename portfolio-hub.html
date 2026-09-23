@@ -319,6 +319,7 @@ let teamSession = null; // {team, section, teamNum, passHash}
 let sectionsConfig = {}; // {1:5, 2:6, ...} from Firebase
 let sectionControl = {1:true,2:true,3:true,4:true}; // per-section open/close
 let teamPasswords  = {}; // {"S1-T1": {hash, mustChange}} from Firebase
+let _rptMissingKeys = []; // populated by loadMissingReport — used by bulk carry-over
 
 const $  = id => document.getElementById(id);
 const clamp = (v,lo,hi) => Math.max(lo, Math.min(hi, v));
@@ -1683,6 +1684,7 @@ async function loadMissingReport(){
     });
   }catch(e){out.innerHTML=`<div class="msg er">Error: ${e.message}</div>`;return;}
   let totalMissing=0,totalPresent=0,totalOverride=0;
+  _rptMissingKeys=[];
   let html='';
   [1,2,3,4].forEach(sec=>{
     const n=sectionsConfig[sec]||10;
@@ -1692,17 +1694,25 @@ async function loadMissingReport(){
       const rec=submittedMap.get(key);
       const present=!!rec;
       const isOv=present&&rec.instructorOverride;
-      if(!present)totalMissing++;
-      else if(isOv)totalOverride++;
+      if(!present){ totalMissing++; _rptMissingKeys.push({sec,tm}); }
+      else if(isOv) totalOverride++;
       else totalPresent++;
       let badge,action='';
       if(!present){
         badge=`<span style="color:#DC2626;font-weight:700;font-size:13px">✗ Missing</span>`;
-        action=`<button class="btn" style="font-size:11px;padding:3px 10px;border-color:#1E3A5F;color:#1E3A5F" onclick="jumpToOverride(${wk},${sec},${tm})">→ Override</button>`;
+        // Two buttons: manual override OR carry over from previous week (if one exists)
+        const prevBtn=wk>2
+          ?`<button class="btn" id="pb-${sec}-${tm}"
+              style="font-size:11px;padding:3px 10px;border-color:#7C3AED;color:#7C3AED;margin-left:4px"
+              onclick="applyPrevWeek(${wk},${sec},${tm},this)">← W${wk-1}</button>`
+          :'';
+        action=`<button class="btn" style="font-size:11px;padding:3px 10px;border-color:#1E3A5F;color:#1E3A5F"
+            onclick="jumpToOverride(${wk},${sec},${tm})">→ Manual</button>${prevBtn}`;
       }else if(isOv){
         const noteHtml=rec.overrideNote?`<br><span style="font-size:11px;color:#5A6E8A;font-weight:400">📋 ${rec.overrideNote}</span>`:'';
         badge=`<span style="color:#D97706;font-weight:700;font-size:13px">📝 Override${noteHtml}</span>`;
-        action=`<button class="btn" style="font-size:11px;padding:3px 10px;border-color:#D97706;color:#D97706" onclick="jumpToOverride(${wk},${sec},${tm})">✎ Edit</button>`;
+        action=`<button class="btn" style="font-size:11px;padding:3px 10px;border-color:#D97706;color:#D97706"
+            onclick="jumpToOverride(${wk},${sec},${tm})">✎ Edit</button>`;
       }else{
         badge=`<span style="color:#059669;font-weight:700;font-size:13px">✓ Submitted</span>`;
       }
@@ -1726,7 +1736,15 @@ async function loadMissingReport(){
     </div>`;
   });
   const total=totalPresent+totalMissing+totalOverride;
-  const summary=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+  // Bulk carry-over button — only shown when wk>2 and there are missing teams
+  const bulkBtn=(wk>2&&totalMissing>0)
+    ?`<button class="btn" id="bulk-prev-btn"
+        style="font-size:12px;padding:6px 14px;border-color:#7C3AED;color:#7C3AED;margin-top:10px;width:100%"
+        onclick="applyAllMissingPrevWeek(${wk},this)">
+        ← Apply W${wk-1} to all ${totalMissing} missing team${totalMissing!==1?'s':''} (penalized)
+      </button>`
+    :'';
+  const summary=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px">
     <div style="flex:1;min-width:100px;background:rgba(5,150,105,.08);border:1.5px solid rgba(5,150,105,.3);border-radius:7px;padding:10px 14px;text-align:center">
       <div style="font-size:22px;font-weight:700;color:#059669">${totalPresent}</div>
       <div style="font-size:11px;color:#5A6E8A;margin-top:2px">Submitted</div>
@@ -1739,8 +1757,67 @@ async function loadMissingReport(){
       <div style="font-size:22px;font-weight:700;color:#DC2626">${totalMissing}</div>
       <div style="font-size:11px;color:#5A6E8A;margin-top:2px">Missing</div>
     </div>
-  </div>`;
+  </div>${bulkBtn}<div style="margin-bottom:14px"></div>`;
   out.innerHTML=`<div style="font-size:12px;font-weight:600;color:#5A6E8A;margin-bottom:10px">Week ${wk} — ${total} teams total</div>`+summary+html;
+}
+
+/* Carry over one team's previous-week allocation as a penalized override */
+async function applyPrevWeek(wk,sec,tm,btnEl){
+  const prevWk=wk-1;
+  if(prevWk<2)return;
+  const origLabel=btnEl?btnEl.textContent:'';
+  if(btnEl){btnEl.disabled=true;btnEl.textContent='…';}
+  try{
+    const snap=await fs.doc(`submissions/S${sec}-T${tm}-W${prevWk}`).get();
+    if(!snap.exists){
+      if(btnEl){btnEl.disabled=false;btnEl.textContent=origLabel;}
+      const msg=$('ov-msg');
+      alert(`S${sec}-T${tm} also has no Week ${prevWk} submission — cannot carry over.`);
+      return;
+    }
+    const prev=snap.data();
+    const note=`No Week ${wk} submission — carried over from Week ${prevWk} allocation. Penalized.`;
+    await fs.doc(`submissions/S${sec}-T${tm}-W${wk}`).set({
+      section:sec, team:tm, week:wk,
+      allocations:prev.allocations,
+      rationale:`[INSTRUCTOR OVERRIDE] ${note}`,
+      submittedAt:new Date().toISOString(),
+      instructorOverride:true,
+      overrideNote:note,
+    });
+    loadMissingReport(); // refresh list
+  }catch(e){
+    if(btnEl){btnEl.disabled=false;btnEl.textContent=origLabel;}
+    alert(`Error: ${e.message}`);
+  }
+}
+
+/* Carry over ALL missing teams at once */
+async function applyAllMissingPrevWeek(wk,btnEl){
+  const keys=[..._rptMissingKeys]; // snapshot before reload
+  if(!keys.length)return;
+  if(btnEl){btnEl.disabled=true;btnEl.textContent='Applying…';}
+  const prevWk=wk-1;
+  let done=0; const failed=[];
+  for(const {sec,tm} of keys){
+    try{
+      const snap=await fs.doc(`submissions/S${sec}-T${tm}-W${prevWk}`).get();
+      if(!snap.exists){failed.push(`S${sec}-T${tm} (no W${prevWk})`);continue;}
+      const prev=snap.data();
+      const note=`No Week ${wk} submission — carried over from Week ${prevWk} allocation. Penalized.`;
+      await fs.doc(`submissions/S${sec}-T${tm}-W${wk}`).set({
+        section:sec, team:tm, week:wk,
+        allocations:prev.allocations,
+        rationale:`[INSTRUCTOR OVERRIDE] ${note}`,
+        submittedAt:new Date().toISOString(),
+        instructorOverride:true,
+        overrideNote:note,
+      });
+      done++;
+    }catch(e){failed.push(`S${sec}-T${tm} (${e.message})`);}
+  }
+  loadMissingReport(); // refresh (clears btnEl)
+  if(failed.length)alert(`Applied ${done}. Could not apply:\n${failed.join('\n')}`);
 }
 
 function jumpToOverride(wk,sec,tm){
