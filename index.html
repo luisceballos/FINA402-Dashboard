@@ -614,11 +614,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeEtf();}
       </div>
       <select id="holdings-week-sel" onchange="setHoldingsWeek(this.value)"
               style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:13px;cursor:pointer">
-        <option value="1">Week 1</option>
-        <option value="2" selected>Week 2</option>
-        <option value="3">Week 3</option>
-        <option value="4">Week 4</option>
-        <option value="5">Week 5</option>
+        <option value="auto">Current week (automatic)</option>
       </select>
     </div>
   </div>
@@ -1009,16 +1005,46 @@ renderPerfChart('all');
 
 /* ── Holdings Tab ────────────────────────────────────────────────── */
 const _H_FF       = new Date('2026-09-04T00:00:00');
-const _H_WEEK_KEY = 'fina402_holdings_week';
-let holdingsWeek   = (()=>{ try { return parseInt(localStorage.getItem(_H_WEEK_KEY)||'2',10)||2; } catch(e){ return 2; } })();
+// Versioned preference replaces the old hard-coded Week 2 default.
+const _H_WEEK_KEY = 'fina402_holdings_week_v2';
+function currentHoldingsWeek(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles', year: 'numeric', month: 'numeric', day: 'numeric'
+  }).formatToParts(now);
+  const p = Object.fromEntries(parts.map(x => [x.type, x.value]));
+  const today = Date.UTC(Number(p.year), Number(p.month)-1, Number(p.day));
+  const first = Date.UTC(_H_FF.getFullYear(), _H_FF.getMonth(), _H_FF.getDate());
+  return Math.max(1, 1 + Math.floor((today-first)/(7*86400000)));
+}
+function validHoldingsPreference(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 1 && n <= currentHoldingsWeek() ? String(n) : 'auto';
+}
+let holdingsPreference = (()=>{
+  try { return validHoldingsPreference(localStorage.getItem(_H_WEEK_KEY)); }
+  catch(e) { return 'auto'; }
+})();
+let holdingsWeek = holdingsPreference === 'auto' ? currentHoldingsWeek() : Number(holdingsPreference);
 let holdingsLoaded = false;
-let _hAvgChart     = null;
-let _hSecChart     = null;
-
+let _hAvgChart = null;
+let _hSecChart = null;
+function syncHoldingsWeekSelector() {
+  const sel = document.getElementById('holdings-week-sel');
+  if (!sel) return;
+  const current = currentHoldingsWeek();
+  sel.innerHTML = '<option value="auto">Current week (Week ' + current + ')</option>' +
+    Array.from({length: current}, (_, i) => '<option value="' + (i+1) + '">Week ' + (i+1) + '</option>').join('');
+  sel.value = holdingsPreference;
+}
 function setHoldingsWeek(w) {
-  holdingsWeek = parseInt(w, 10) || 2;
-  try { localStorage.setItem(_H_WEEK_KEY, String(holdingsWeek)); } catch(e) {}
-  holdingsLoaded = false;  // force reload next visit
+  holdingsPreference = validHoldingsPreference(w);
+  holdingsWeek = holdingsPreference === 'auto' ? currentHoldingsWeek() : Number(holdingsPreference);
+  holdingsLoaded = false;
+  syncHoldingsWeekSelector();
+  try {
+    localStorage.setItem(_H_WEEK_KEY, holdingsPreference);
+    return true;
+  } catch(e) { return false; }
 }
 
 async function loadHoldings(week) {
@@ -1467,10 +1493,11 @@ async function _fbPatch(docPath, fields) {
 })();
 
 function saveSettings() {
+  const weekSaved = setHoldingsWeek(document.getElementById('holdings-week-sel').value);
   applySettings();
   const msg = document.getElementById('save-msg');
   if (msg) {
-    msg.textContent = '✓ Settings saved';
+    msg.textContent = weekSaved ? '✓ Settings saved in this browser' : '⚠ Browser storage unavailable; week selected for this visit only';
     msg.style.opacity = '1';
     setTimeout(() => { msg.style.opacity = '0'; }, 2200);
   }
@@ -1523,6 +1550,11 @@ function showPage(pageId, btn) {
       setTimeout(() => document.getElementById('spw')?.focus(), 50);
     }
   }
+  if (holdingsPreference === 'auto' && holdingsWeek !== currentHoldingsWeek()) {
+    holdingsWeek = currentHoldingsWeek();
+    holdingsLoaded = false;
+  }
+  syncHoldingsWeekSelector();
   if (pageId === 'holdings' && !holdingsLoaded) {
     loadHoldings(holdingsWeek);
   }
@@ -1583,11 +1615,8 @@ function applySettings() {
 // Init on load
 loadSettings();
 applySettings();
-// Sync Holdings week selector to stored preference
-(function(){
-  const sel = document.getElementById('holdings-week-sel');
-  if (sel) sel.value = String(holdingsWeek);
-})();
+// Populate every week through the current course week.
+syncHoldingsWeekSelector();
 
 /* ── Reset All Settings ──────────────────────────────────── */
 function resetAllSettings() {
